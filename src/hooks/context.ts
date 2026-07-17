@@ -44,6 +44,11 @@ Sema is a Scheme-like Lisp where LLM primitives are first-class.
 - (sys/cwd), (sys/env "VAR")
 - (kv/open "name" path), (kv/get/set/del)
 
+### CLI (fallback when sema_* tools are unavailable)
+- Run a file: \`sema path/to/file.sema\` — there is NO \`sema run\` subcommand
+- One-liner: \`sema -e '(+ 1 2)'\`; JSON envelope: \`sema eval --stdin --json\`
+- Script args go after \`--\`: \`sema script.sema -- arg1 arg2\`
+
 ### Important
 - Sema is NOT JavaScript, Python, or any C-like language
 - It is dynamically typed with a NaN-boxed Value type

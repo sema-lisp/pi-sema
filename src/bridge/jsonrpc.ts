@@ -38,9 +38,17 @@ export class JsonRpcClient {
   constructor(
     private readonly stdin: Writable,
     stdout: Readable,
+    /**
+     * Lazily-evaluated crash detail appended to the stdout-closed error.
+     * Node fires the stream's 'close' BEFORE the child's 'close' (which waits
+     * for all stdio), so the process-level rich error is deterministically
+     * unreachable for pending-request rejection — this closure is how exit
+     * code + stderr reach the caller.
+     */
+    private readonly closeDetail?: () => string,
   ) {
     stdout.on("data", (chunk: Buffer) => this.onData(chunk.toString("utf-8")));
-    stdout.on("close", () => this.dispose(new Error("sema mcp stdout closed")));
+    stdout.on("close", () => this.dispose(new Error(`sema mcp stdout closed${this.closeDetail?.() ?? ""}`)));
   }
 
   request<T = unknown>(method: string, params?: unknown, timeoutMs = 30_000): Promise<T> {

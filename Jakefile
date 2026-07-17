@@ -41,6 +41,12 @@ task dev: [install]
     pi
 
 @group pi
+@desc "Uninstall the local extension from pi (removes it from ~/.pi settings)"
+task uninstall:
+    @needs pi "npm install -g @earendil-works/pi-coding-agent"
+    pi remove .
+
+@group pi
 @desc "Run the test suite (Vitest): jake pi.test [args='test/forge.test.ts']"
 task test args="":
     @needs npm

@@ -32,6 +32,14 @@ export class McpProcess {
     return this.child !== null && this.child.exitCode === null;
   }
 
+  get pid(): number | undefined {
+    return this.child?.pid;
+  }
+
+  get hasRestarted(): boolean {
+    return this.restarted;
+  }
+
   async start(): Promise<void> {
     // Tool exclusion happens bridge-side (glob-aware, no --include/--exclude
     // flags): --include would hide later-forged tools, and --exclude wants
@@ -68,7 +76,11 @@ export class McpProcess {
       }
     });
 
-    this._client = new JsonRpcClient(child.stdin, child.stdout);
+    this._client = new JsonRpcClient(
+      child.stdin,
+      child.stdout,
+      () => ` (exit code ${child.exitCode ?? "?"}; stderr tail: ${stderrTail.trim() || "<empty>"})`,
+    );
     try {
       await mcpInitialize(this._client);
       this.restarted = false; // healthy start resets the crash budget

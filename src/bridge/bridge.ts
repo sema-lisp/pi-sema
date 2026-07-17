@@ -5,6 +5,7 @@ import type { LibraryStore } from "../library/store.js";
 import { McpProcess } from "./process.js";
 import { mcpListTools, mcpCallTool, type McpCallResult, type McpTool } from "./jsonrpc.js";
 import { sanitizeSchema, toPiToolName, expandExcludes } from "./schema.js";
+import { spawnSema } from "../sema.js";
 
 const CALL_TIMEOUT_MS = 120_000;
 
@@ -27,7 +28,10 @@ export class SemaBridge {
   private process: McpProcess | null = null;
   /** mcpName → piName for everything we've registered. */
   private registered = new Map<string, string>();
+  /** mcpName → hash of description+schema, to re-register on definition drift. */
+  private signatures = new Map<string, string>();
   private excluded = new Set<string>();
+  private cwd = process.cwd();
 
   constructor(
     private readonly pi: ExtensionAPI,
@@ -40,7 +44,35 @@ export class SemaBridge {
     return this.process?.running ?? false;
   }
 
+  /**
+   * The bridge is a private child process — it deliberately does NOT appear in
+   * MCP-listing tools (e.g. pi-mcp-adapter's `mcp`), which enumerate mcp.json
+   * servers. This tool is the introspection surface instead; it needs no MCP
+   * round-trip, so it answers even when the server is down.
+   */
+  registerStatusTool(): void {
+    const bridge = this;
+    this.pi.registerTool({
+      name: "sema_status",
+      label: "Sema: bridge status",
+      description:
+        "Health of the sema MCP bridge (a private child process — it does not appear in MCP server listings). Shows running state, pid, sandbox mode, and registered/excluded tool counts. Works even when the bridge is down.",
+      parameters: sanitizeSchema({ type: "object", properties: {} }),
+      async execute(): Promise<AgentToolResult<unknown>> {
+        const proc = bridge.process;
+        const lines = [
+          `bridge: ${proc?.running ? "running" : "DOWN"}${proc?.pid ? ` (pid ${proc.pid})` : ""}${proc?.hasRestarted ? " — crashed and auto-restarted once" : ""}`,
+          `sandbox (mcp): ${bridge.cfg.sandbox.mcp}`,
+          `registered tools: ${bridge.registered.size} (${[...bridge.registered.values()].join(", ") || "none"})`,
+          `excluded: ${[...bridge.excluded].join(", ") || "none"}`,
+        ];
+        return { content: [{ type: "text", text: lines.join("\n") }], details: {} };
+      },
+    });
+  }
+
   async start(cwd: string, sandboxSupported: boolean): Promise<void> {
+    this.cwd = cwd;
     const sandbox = this.cfg.sandbox.mcp;
     if (sandbox !== "all" && !sandboxSupported) {
       this.notify(
@@ -75,7 +107,19 @@ export class SemaBridge {
 
     const added: string[] = [];
     for (const tool of tools) {
-      if (this.excluded.has(tool.name) || this.registered.has(tool.name)) continue;
+      if (this.excluded.has(tool.name)) continue;
+      const signature = JSON.stringify([tool.description, tool.inputSchema]);
+      if (this.registered.has(tool.name)) {
+        // Re-forged tool with a changed description/schema: re-register under
+        // the SAME pi name (within-extension registration is last-wins) so the
+        // model sees the fresh definition instead of a stale schema.
+        if (this.signatures.get(tool.name) !== signature) {
+          this.signatures.set(tool.name, signature);
+          this.registerOne(tool, this.registered.get(tool.name));
+        }
+        continue;
+      }
+      this.signatures.set(tool.name, signature);
       this.registerOne(tool);
       added.push(this.registered.get(tool.name)!);
     }
@@ -98,10 +142,49 @@ export class SemaBridge {
     return this.registered.get(mcpName);
   }
 
-  private registerOne(tool: McpTool): void {
+  private registerRunFile(tool: McpTool, piName: string): void {
+    const bridge = this;
+    this.pi.registerTool({
+      name: piName,
+      label: "Sema: run_file",
+      description:
+        tool.description ??
+        "Run a .sema file in an isolated subprocess (survives bridge crashes; safe for LLM-heavy scripts).",
+      parameters: runFileSchema(),
+      promptSnippet: "Run a .sema file in an isolated subprocess",
+      async execute(_id, params, signal): Promise<AgentToolResult<unknown>> {
+        const p = params as { file_path: string; arguments?: string[] };
+        // Sandbox parity with the bridge: the top-level --sandbox flag uses
+        // the same grammar the mcp server would apply.
+        const args: string[] = [];
+        if (bridge.cfg.sandbox.mcp !== "all") args.push("--sandbox", bridge.cfg.sandbox.mcp);
+        args.push(p.file_path);
+        if (p.arguments && p.arguments.length > 0) args.push("--", ...p.arguments);
+        const result = await spawnSema(args, { cwd: bridge.cwd, timeoutMs: RUN_FILE_TIMEOUT_MS, signal });
+        const text = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n--- stderr ---\n");
+        if (result.killed) {
+          return { content: [{ type: "text", text: `${text}\n(killed: timeout or abort)` }], details: { isError: true } };
+        }
+        return {
+          content: [{ type: "text", text: text || "(no output)" }],
+          details: result.code === 0 ? {} : { isError: true, exitCode: result.code },
+        };
+      },
+    });
+  }
+
+  private registerOne(tool: McpTool, existingPiName?: string): void {
     const taken = new Set(this.registered.values());
-    const piName = toPiToolName(tool.name, taken);
+    const piName = existingPiName ?? toPiToolName(tool.name, taken);
     this.registered.set(tool.name, piName);
+
+    // run_file gets a genuinely isolated subprocess instead of riding the
+    // shared MCP stdio channel: a script that crashes (or floods stdout)
+    // can't take the bridge down with it, and it works even when the bridge is.
+    if (tool.name === "run_file") {
+      this.registerRunFile(tool, piName);
+      return;
+    }
 
     const bridge = this;
     this.pi.registerTool({
@@ -140,6 +223,19 @@ export class SemaBridge {
       },
     });
   }
+}
+
+const RUN_FILE_TIMEOUT_MS = 300_000;
+
+function runFileSchema(): ReturnType<typeof sanitizeSchema> {
+  return sanitizeSchema({
+    type: "object",
+    properties: {
+      file_path: { type: "string", description: "Path to the .sema (or .semac) file to run" },
+      arguments: { type: "array", items: { type: "string" }, description: "Script arguments (passed after --)" },
+    },
+    required: ["file_path"],
+  });
 }
 
 const ABORTED = Symbol("aborted");

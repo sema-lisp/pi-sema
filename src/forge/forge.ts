@@ -1,4 +1,5 @@
 import { Type } from "typebox";
+import { existsSync } from "node:fs";
 import type { ExtensionAPI, AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
 import { sanitizeName } from "../library/store.js";
@@ -96,6 +97,8 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
         if (choice?.startsWith("global")) tier = "global";
         else if (choice?.startsWith("project")) tier = "project";
       }
+      const targetPath = store.resolve("tools", name)?.path;
+      const existed = targetPath != null && existsSync(targetPath);
       const path = store.save(tier, "tools", name, `; ${p.description}\n${p.source.trim()}`);
 
       // 4. Inject into the live server env + 5. register with pi.
@@ -119,7 +122,11 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
         content: [
           {
             type: "text",
-            text: `status: created\nStored: ${path} (${tier} tier)\nRegistered as pi tool: ${piName} — callable from your NEXT turn.`,
+            text:
+              `status: ${existed ? "updated (overwrote existing definition; live env re-injected)" : "created"}\n` +
+              `Stored: ${path} (${tier} tier)\n` +
+              `Registered as pi tool: ${piName} — callable directly from your NEXT turn.\n` +
+              `To exercise it THIS turn, call sema_eval with (${deftoolName} …args) — the definition is already live.`,
           },
         ],
         details: {},

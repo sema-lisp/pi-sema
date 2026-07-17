@@ -37,6 +37,7 @@ export default function (pi: ExtensionAPI) {
     const cfg = loadConfig(ctx.cwd, pi, (msg) => ctx.ui.notify(msg, "warning"));
     const store = new LibraryStore(ctx.cwd);
     const bridge = new SemaBridge(pi, cfg, store, (msg, type) => ctx.ui.notify(msg, type));
+    bridge.registerStatusTool();
     runtime = { cfg, store, bridge };
 
     try {
