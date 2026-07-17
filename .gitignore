@@ -13,8 +13,7 @@ jspm_packages/
 !.yarn/versions
 
 # ─────────────────────────────────────────────────────────────
-# Package manager lockfiles / debug logs
-# (this repo commits bun.lock; ignore the others' noise)
+# Package managers
 # ─────────────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
@@ -96,17 +95,20 @@ logs/
 # ─────────────────────────────────────────────────────────────
 # Local/per-machine agent state — keep shared config, drop scratch
 .pi/
-.claude/settings.local.json
+.claude/
+.codex/
+.antigravitycli/
 .aider*
 .cursor/
+.codex/
 .continue/
 .windsurfrules
 
 # ─────────────────────────────────────────────────────────────
-# MCP config (may hold local paths / tokens)
+# MCP config
 # ─────────────────────────────────────────────────────────────
 .mcp.local.json
-mcp.local.json
+mcp.json
 
 # ─────────────────────────────────────────────────────────────
 # Project tooling
