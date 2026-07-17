@@ -2,6 +2,7 @@
 description: Iterative Sema scratchpad — explore an idea with rapid sema_eval round-trips
 argument-hint: "[what to explore]"
 ---
+
 Open an iterative Sema scratch session about: $ARGUMENTS
 
 Work in small sema_eval round-trips: evaluate one expression at a time, show me

@@ -3,11 +3,13 @@
 ## Unreleased
 
 ### Added
+
 - **Packaged skills + prompt templates** (`pi.skills` / `pi.prompts`): the `sema` skill
   (deep authoring reference with verified gotchas, progressive disclosure) and the
   `/sema-review`, `/sema-scratch` templates.
 
 ### Changed
+
 - **Single theme**: dropped `sema-light` (Pi themes cannot set the terminal background,
   so a light variant only works in light terminal profiles — cut until there's demand).
   The `sema` theme now matches the editor-reference aesthetic: burnt-umber `#27160c`
@@ -27,6 +29,7 @@
 Complete rebuild: from a thin CLI wrapper into a self-extending toolkit.
 
 ### Added
+
 - **MCP bridge**: one long-lived `sema mcp` child; all server tools registered as native
   `sema_*` Pi tools (hand-rolled line-delimited JSON-RPC client, schema pass-through,
   glob-aware exclusion, crash auto-restart).
@@ -45,18 +48,21 @@ Complete rebuild: from a thin CLI wrapper into a self-extending toolkit.
 - 70+ unit/integration tests, incl. live tests against the real `sema` binary.
 
 ### Changed
+
 - All sema invocations moved to `spawnSema` (`node:child_process`) with caller-enforced
   timeouts — sema's own `--timeout` flag is a parsed no-op.
 - System-prompt Sema reference now scans for `.sema` files in pure Node (no `fd`/`find`),
   cached per cwd.
 
 ### Removed
+
 - The 4 static tools (`sema_eval`/`sema_fmt`/`sema_build`/`sema_compile` as execSync
   wrappers) — superseded by the bridge.
 - The `/sema-run`, `/sema-fmt`, `/sema-build` slash commands.
 - Dead `src/mcp.ts`.
 
 ### Fixed
+
 - Failing commands with stdout no longer misreported as success (exit-code bug in the
   old `runSemaAsync`).
 - AbortSignal is honored everywhere (tool calls, probes, workflow runs).

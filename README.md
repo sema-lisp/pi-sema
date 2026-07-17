@@ -48,25 +48,25 @@ curl -fsSL https://sema-lang.com/install.sh | sh
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `/sema:forge <desc>` | Forge a persistent Sema tool from a description (generate → verify → approve → store → live-register) |
-| `/sema:workflow <desc>` | Author a Sema workflow (generate → static check → preview → approve → store → run) |
-| `/sema:workflows` | Runs dashboard overlay (also on `ctrl+alt+s`): live + historical, phase/agent drill-down |
-| `/sema:tools` | List bridged + forged tools; `refresh` re-syncs from the server |
+| Command                 | Description                                                                                           |
+| ----------------------- | ----------------------------------------------------------------------------------------------------- |
+| `/sema:forge <desc>`    | Forge a persistent Sema tool from a description (generate → verify → approve → store → live-register) |
+| `/sema:workflow <desc>` | Author a Sema workflow (generate → static check → preview → approve → store → run)                    |
+| `/sema:workflows`       | Runs dashboard overlay (also on `ctrl+alt+s`): live + historical, phase/agent drill-down              |
+| `/sema:tools`           | List bridged + forged tools; `refresh` re-syncs from the server                                       |
 
 Tools and workflows are deliberately **separate things**: separate storage, separate
 commands, separate flows.
 
 ## Agent-facing tools
 
-| Tool | Description |
-| --- | --- |
-| `sema_eval`, `sema_run_file`, `sema_fmt`, `sema_docs`, `sema_docs_search`, … | Bridged sema MCP defaults |
-| `sema_<name>` | Every forged/library tool, live-registered |
-| `create_sema_tool` | The self-extension loop (the agent can forge unprompted) |
-| `submit_sema_workflow` | Validate + store an authored workflow |
-| `sema_workflow_run` | Run a library workflow with live status; resumable via `resume=<run_id>` |
+| Tool                                                                         | Description                                                              |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `sema_eval`, `sema_run_file`, `sema_fmt`, `sema_docs`, `sema_docs_search`, … | Bridged sema MCP defaults                                                |
+| `sema_<name>`                                                                | Every forged/library tool, live-registered                               |
+| `create_sema_tool`                                                           | The self-extension loop (the agent can forge unprompted)                 |
+| `submit_sema_workflow`                                                       | Validate + store an authored workflow                                    |
+| `sema_workflow_run`                                                          | Run a library workflow with live status; resumable via `resume=<run_id>` |
 
 ## Theme
 
@@ -86,11 +86,11 @@ Switch in-session with `/settings` → **Theme**, set `"theme": "sema"` in
 
 The package also ships agent resources:
 
-| Resource | What it does |
-| --- | --- |
+| Resource                          | What it does                                                                                                                                                                                               |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `/skill:sema` (auto-triggers too) | Deep Sema authoring reference — deftool/defworkflow syntax, verified stdlib gotchas, CLI usage, debugging playbook. Loaded on demand (progressive disclosure), so it costs ~1 line of context until needed |
-| `/sema-review <file.sema>` | Review a Sema file: fmt drift, `workflow check` diagnostics, builtin-name verification against the live docs |
-| `/sema-scratch [topic]` | Iterative scratchpad — one `sema_eval` round-trip at a time, state persists, offers to forge keepers |
+| `/sema-review <file.sema>`        | Review a Sema file: fmt drift, `workflow check` diagnostics, builtin-name verification against the live docs                                                                                               |
+| `/sema-scratch [topic]`           | Iterative scratchpad — one `sema_eval` round-trip at a time, state persists, offers to forge keepers                                                                                                       |
 
 ## Storage
 
@@ -110,12 +110,12 @@ overridden by CLI flags (`pi --sema-sandbox=… --sema-exclude=… --sema-budget
 
 ```jsonc
 {
-  "sandbox": { "mcp": "all", "workflows": "all" },  // "all" = allow everything (default)
-  "excludeTools": ["notebook/*"],                    // hidden from Pi (globs ok)
+  "sandbox": { "mcp": "all", "workflows": "all" }, // "all" = allow everything (default)
+  "excludeTools": ["notebook/*"], // hidden from Pi (globs ok)
   "library": { "defaultTier": "project" },
   "forge": { "maxRounds": 3, "probeTimeoutMs": 15000 },
   "workflows": { "defaultBudgetUsd": null, "runDir": null },
-  "ui": { "dashboardShortcut": "ctrl+alt+s" }
+  "ui": { "dashboardShortcut": "ctrl+alt+s" },
 }
 ```
 

@@ -2,6 +2,7 @@
 description: Review a .sema file — format, static checks, verified builtin usage, and a dry probe
 argument-hint: "<file.sema>"
 ---
+
 Review the Sema source file `$1` thoroughly:
 
 1. Read it. For EVERY slash-namespaced builtin it calls, verify the name and
