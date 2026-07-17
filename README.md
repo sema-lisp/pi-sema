@@ -70,18 +70,27 @@ commands, separate flows.
 
 ## Theme
 
-The package ships two on-brand Pi themes — brass-on-warm-black, translated from Sema's own
-website palette and syntax highlighting (not the cool-blue aesthetic most AI tooling ships):
+The package ships the `sema` Pi theme — brass and burnt umber on warm near-black
+`#131110`, matched to the Sema editor aesthetic (gold accents, teal links/bullets,
+one warm `#27160c` highlight band; not the cool-blue look most AI tooling ships).
 
-| Theme | Description |
+Switch in-session with `/settings` → **Theme**, set `"theme": "sema"` in
+`~/.pi/agent/settings.json`, or launch with `pi --theme sema`.
+
+> Theme dev tip: Pi has no theme builder, but it **hot-reloads the active custom
+> theme** — copy the JSON to `~/.pi/agent/themes/`, select it, and edits repaint
+> the live session. Note Pi themes never set the terminal background; the canvas
+> color comes from your terminal profile (set it to `#131110` for the full look).
+
+## Skills & prompt templates
+
+The package also ships agent resources:
+
+| Resource | What it does |
 | --- | --- |
-| `sema` | Dark — brass `#c8a855` on warm near-black `#131110`, the brand's home |
-| `sema-light` | Parchment — dark brass ink on warm off-white, for light terminals |
-
-Installing the package makes both available. Switch in-session with `/settings` → **Theme**
-(the picker is searchable — type `sema`), set `"theme": "sema"` in
-`~/.pi/agent/settings.json`, or launch with `pi --theme sema`. Wire Pi's auto light/dark
-switching with `pi --theme "sema-light,sema"`.
+| `/skill:sema` (auto-triggers too) | Deep Sema authoring reference — deftool/defworkflow syntax, verified stdlib gotchas, CLI usage, debugging playbook. Loaded on demand (progressive disclosure), so it costs ~1 line of context until needed |
+| `/sema-review <file.sema>` | Review a Sema file: fmt drift, `workflow check` diagnostics, builtin-name verification against the live docs |
+| `/sema-scratch [topic]` | Iterative scratchpad — one `sema_eval` round-trip at a time, state persists, offers to forge keepers |
 
 ## Storage
 

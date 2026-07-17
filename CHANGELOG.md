@@ -3,6 +3,15 @@
 ## Unreleased
 
 ### Added
+- **Packaged skills + prompt templates** (`pi.skills` / `pi.prompts`): the `sema` skill
+  (deep authoring reference with verified gotchas, progressive disclosure) and the
+  `/sema-review`, `/sema-scratch` templates.
+
+### Changed
+- **Single theme**: dropped `sema-light` (Pi themes cannot set the terminal background,
+  so a light variant only works in light terminal profiles — cut until there's demand).
+  The `sema` theme now matches the editor-reference aesthetic: burnt-umber `#27160c`
+  selection/user-message band on `#131110`, sampled from the canonical screenshot.
 - **Themes**: two bundled Pi themes, `sema` (dark) and `sema-light` (parchment), translated
   from Sema's website brand palette and syntax highlighting. Shipped via `pi.themes` in
   `package.json`; switch via `/settings` → Theme, or `pi --theme sema`. Validated against

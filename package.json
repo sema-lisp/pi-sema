@@ -22,7 +22,9 @@
   "main": "dist/index.js",
   "files": [
     "dist/",
-    "themes/"
+    "themes/",
+    "skills/",
+    "prompts/"
   ],
   "scripts": {
     "build": "tsc",
@@ -46,8 +48,13 @@
       "./dist/index.js"
     ],
     "themes": [
-      "./themes/sema.json",
-      "./themes/sema-light.json"
+      "./themes/sema.json"
+    ],
+    "skills": [
+      "./skills"
+    ],
+    "prompts": [
+      "./prompts"
     ]
   },
   "keywords": [

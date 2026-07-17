@@ -20,7 +20,8 @@
     "teal": "#7aacb8",
     "steel": "#88a8b8",
     "mauve": "#b898c8",
-    "paren": "#6a6258"
+    "paren": "#6a6258",
+    "umber": "#27160c"
   },
   "colors": {
     "accent": "gold",
@@ -34,8 +35,8 @@
     "dim": "dim",
     "text": "ink",
     "thinkingText": "muted",
-    "selectedBg": "goldSoft",
-    "userMessageBg": "bgElevated",
+    "selectedBg": "umber",
+    "userMessageBg": "umber",
     "userMessageText": "ink",
     "customMessageBg": "bgEditor",
     "customMessageText": "ink",

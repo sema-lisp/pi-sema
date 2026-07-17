@@ -17,7 +17,7 @@ const SCHEMA = join(
   ROOT,
   "node_modules/@earendil-works/pi-coding-agent/dist/modes/interactive/theme/theme-schema.json",
 );
-const THEMES = ["sema", "sema-light"] as const;
+const THEMES = ["sema"] as const;
 
 const HEX = /^#[0-9a-fA-F]{6}$/;
 
