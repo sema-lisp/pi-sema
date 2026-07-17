@@ -1,5 +1,8 @@
 # Changelog
 
+> [!IMPORTANT]  
+> no version is released yet, we reconsile all of this into an inital v0.1.0 release once we are happy with it.
+
 ## Unreleased
 
 ### Added
