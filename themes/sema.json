@@ -34,21 +34,19 @@
     "dim": "dim",
     "text": "ink",
     "thinkingText": "muted",
-
     "selectedBg": "goldSoft",
     "userMessageBg": "bgElevated",
     "userMessageText": "ink",
     "customMessageBg": "bgEditor",
     "customMessageText": "ink",
-    "customMessageLabel": "gold",
+    "customMessageLabel": "mauve",
     "toolPendingBg": "bgElevated",
     "toolSuccessBg": "#1a1c16",
     "toolErrorBg": "#211615",
     "toolTitle": "gold",
     "toolOutput": "muted",
-
     "mdHeading": "gold",
-    "mdLink": "goldBright",
+    "mdLink": "teal",
     "mdLinkUrl": "dim",
     "mdCode": "amber",
     "mdCodeBlock": "ink",
@@ -56,12 +54,10 @@
     "mdQuote": "muted",
     "mdQuoteBorder": "border",
     "mdHr": "divider",
-    "mdListBullet": "gold",
-
+    "mdListBullet": "teal",
     "toolDiffAdded": "success",
     "toolDiffRemoved": "error",
     "toolDiffContext": "muted",
-
     "syntaxComment": "dim",
     "syntaxKeyword": "gold",
     "syntaxFunction": "steel",
@@ -71,15 +67,13 @@
     "syntaxType": "teal",
     "syntaxOperator": "gold",
     "syntaxPunctuation": "paren",
-
     "thinkingOff": "dim",
     "thinkingMinimal": "muted",
-    "thinkingLow": "steel",
-    "thinkingMedium": "gold",
-    "thinkingHigh": "goldBright",
-    "thinkingXhigh": "amber",
+    "thinkingLow": "teal",
+    "thinkingMedium": "steel",
+    "thinkingHigh": "gold",
+    "thinkingXhigh": "goldBright",
     "thinkingMax": "error",
-
     "bashMode": "amber"
   },
   "export": {
