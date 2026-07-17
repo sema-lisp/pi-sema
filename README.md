@@ -68,6 +68,21 @@ commands, separate flows.
 | `submit_sema_workflow` | Validate + store an authored workflow |
 | `sema_workflow_run` | Run a library workflow with live status; resumable via `resume=<run_id>` |
 
+## Theme
+
+The package ships two on-brand Pi themes — brass-on-warm-black, translated from Sema's own
+website palette and syntax highlighting (not the cool-blue aesthetic most AI tooling ships):
+
+| Theme | Description |
+| --- | --- |
+| `sema` | Dark — brass `#c8a855` on warm near-black `#131110`, the brand's home |
+| `sema-light` | Parchment — dark brass ink on warm off-white, for light terminals |
+
+Installing the package makes both available. Switch in-session with `/settings` → **Theme**
+(the picker is searchable — type `sema`), set `"theme": "sema"` in
+`~/.pi/agent/settings.json`, or launch with `pi --theme sema`. Wire Pi's auto light/dark
+switching with `pi --theme "sema-light,sema"`.
+
 ## Storage
 
 Tiered, following Pi's conventions — project shadows global by name:

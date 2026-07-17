@@ -1,55 +1,139 @@
-# --- Dependencies ---
+# ─────────────────────────────────────────────────────────────
+# Dependencies
+# ─────────────────────────────────────────────────────────────
 node_modules/
+jspm_packages/
 .pnp
-.pnp.js
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/releases
+!.yarn/plugins
+!.yarn/sdks
+!.yarn/versions
 
-# --- Testing ---
-coverage/
-*.lcov
-
-# --- Build Outputs ---
-dist/
-build/
-*.tsbuildinfo
-*.semac
-
-# --- Bun ---
-bun.lockb
-.bun-build
-
-# --- Logs ---
-*.log
+# ─────────────────────────────────────────────────────────────
+# Package manager lockfiles / debug logs
+# (this repo commits bun.lock; ignore the others' noise)
+# ─────────────────────────────────────────────────────────────
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 lerna-debug.log*
+.npm/
+.pnpm-store/
 
-# --- OS Specific ---
-.DS_Store
-.DS_Store?
-._*
-Thumbs.db
-ehthumbs.db
-Desktop.ini
+# ─────────────────────────────────────────────────────────────
+# Build outputs
+# ─────────────────────────────────────────────────────────────
+dist/
+build/
+out/
+lib/
+*.tsbuildinfo
+*.semac
 
-# --- IDEs and Editors ---
+# ─────────────────────────────────────────────────────────────
+# Bun
+# ─────────────────────────────────────────────────────────────
+.bun-build
+bun.lockb
+
+# ─────────────────────────────────────────────────────────────
+# Testing & coverage
+# ─────────────────────────────────────────────────────────────
+coverage/
+*.lcov
+.nyc_output/
+
+# ─────────────────────────────────────────────────────────────
+# Logs & temp files
+# ─────────────────────────────────────────────────────────────
+*.log
+logs/
+*.tmp
+*.temp
+*.bak
+*.pid
+*.seed
+
+# ─────────────────────────────────────────────────────────────
+# Environment & secrets
+# ─────────────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ─────────────────────────────────────────────────────────────
+# Editors & IDEs
+# ─────────────────────────────────────────────────────────────
+# JetBrains (IntelliJ/WebStorm) + Junie AI
 .idea/
+.junie/
+*.iml
+# VS Code (keep shared workspace settings if a team adds them)
 .vscode/
+!.vscode/settings.json
+!.vscode/extensions.json
+# Vim / Emacs / Sublime
 *.swp
 *.swo
+*~
+.\#*
+\#*\#
+*.sublime-workspace
+*.sublime-project
+# Eclipse
 .project
 .classpath
 .settings/
 
-# --- Project Specific ---
-.jake/
+# ─────────────────────────────────────────────────────────────
+# AI tooling
+# ─────────────────────────────────────────────────────────────
+# Local/per-machine agent state — keep shared config, drop scratch
 .pi/
+.claude/settings.local.json
+.aider*
+.cursor/
+.continue/
+.windsurfrules
 
-# --- Environment Variables ---
-.env
-.env.*
-!.env.example
+# ─────────────────────────────────────────────────────────────
+# MCP config (may hold local paths / tokens)
+# ─────────────────────────────────────────────────────────────
+.mcp.local.json
+mcp.local.json
 
-# --- Misc ---
-*.tmp
-*.bak
+# ─────────────────────────────────────────────────────────────
+# Project tooling
+# ─────────────────────────────────────────────────────────────
+.jake/
+
+# ─────────────────────────────────────────────────────────────
+# macOS junk
+# ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+.AppleDouble
+.LSOverride
+.fseventsd
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# ─────────────────────────────────────────────────────────────
+# Windows junk
+# ─────────────────────────────────────────────────────────────
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk

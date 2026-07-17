@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Themes**: two bundled Pi themes, `sema` (dark) and `sema-light` (parchment), translated
+  from Sema's website brand palette and syntax highlighting. Shipped via `pi.themes` in
+  `package.json`; switch via `/settings` → Theme, or `pi --theme sema`. Validated against
+  Pi's own theme schema in `test/theme.test.ts`.
+- Themes refined against the canonical BrandGuide + design-system tokens: functions/builtins
+  steel `#88a8b8`, variables mauve `#b898c8` (per `ui/src/styles/tokens.css`), semantic
+  success/error `#6a9955`/`#c85555`, border `#2b2620`, gold-soft selection overlay, gold-bright
+  links, brand-blend tool backgrounds, and the `thinkingMax` tier (optional in Pi's schema,
+  contrary to the earlier exactly-required test assumption).
+
 ## 0.2.0 — 2026-07-17
 
 Complete rebuild: from a thin CLI wrapper into a self-extending toolkit.

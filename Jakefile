@@ -41,10 +41,18 @@ task dev: [install]
     pi
 
 @group pi
-@desc "Uninstall the local extension from pi (removes it from ~/.pi settings)"
+@desc "Uninstall the local extension from pi (clears both global + project-local scopes)"
 task uninstall:
     @needs pi "npm install -g @earendil-works/pi-coding-agent"
-    pi remove .
+    # pi matches a registration by the source string that RESOLVES to '.' in each
+    # scope, so a copy registered under another spelling (or in project-local
+    # .pi/settings.json) survives a single global remove and keeps double-loading
+    # dist/index.js — the "Tool X conflicts with .../dist" fatal error. Clear both
+    # scopes, then print what's left so any stray entry is visible.
+    pi remove . || true
+    pi remove . -l || true
+    echo "Remaining pi packages:"
+    pi list
 
 @group pi
 @desc "Run the test suite (Vitest): jake pi.test [args='test/forge.test.ts']"
