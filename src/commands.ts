@@ -1,11 +1,30 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "./index.js";
+import { renderForgePrompt } from "./forge/prompts.js";
 
 /**
  * All human-facing commands live under the `sema:` prefix (legal and
  * precedented — pi itself surfaces skills as `skill:<name>`).
  */
 export function registerCommands(pi: ExtensionAPI, getRuntime: () => PiSemaRuntime | null): void {
+  pi.registerCommand("sema:forge", {
+    description: "Forge a new Sema tool from a natural-language description (generate → verify → approve → store)",
+    handler: async (args, ctx) => {
+      let description = args.trim();
+      if (!description && ctx.hasUI) {
+        description = (await ctx.ui.input("What should the tool do?", "e.g. parse a composer.lock and list outdated deps")) ?? "";
+      }
+      if (!description) {
+        ctx.ui.notify("Usage: /sema:forge <what the tool should do>", "warning");
+        return;
+      }
+      pi.sendMessage(
+        { customType: "sema:forge-request", content: renderForgePrompt(description), display: true },
+        { triggerTurn: true },
+      );
+    },
+  });
+
   pi.registerCommand("sema:tools", {
     description: "List Sema tools (bridged + forged); 'refresh' to re-sync from the MCP server",
     handler: async (args, ctx) => {
