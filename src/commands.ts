@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "./index.js";
-import { renderForgePrompt } from "./forge/prompts.js";
+import { renderForgePrompt, renderWorkflowPrompt } from "./forge/prompts.js";
 
 /**
  * All human-facing commands live under the `sema:` prefix (legal and
@@ -20,6 +20,28 @@ export function registerCommands(pi: ExtensionAPI, getRuntime: () => PiSemaRunti
       }
       pi.sendMessage(
         { customType: "sema:forge-request", content: renderForgePrompt(description), display: true },
+        { triggerTurn: true },
+      );
+    },
+  });
+
+  pi.registerCommand("sema:workflow", {
+    description: "Author a Sema workflow from a natural-language description (generate → check → approve → store → run)",
+    handler: async (args, ctx) => {
+      let description = args.trim();
+      if (!description && ctx.hasUI) {
+        description =
+          (await ctx.ui.input(
+            "What should the workflow do?",
+            "e.g. research topics from topics.txt, write articles, fact-check with 10 agents",
+          )) ?? "";
+      }
+      if (!description) {
+        ctx.ui.notify("Usage: /sema:workflow <what the workflow should do>", "warning");
+        return;
+      }
+      pi.sendMessage(
+        { customType: "sema:workflow-request", content: renderWorkflowPrompt(description), display: true },
         { triggerTurn: true },
       );
     },
