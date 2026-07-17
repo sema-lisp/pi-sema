@@ -28,7 +28,11 @@ export function parseEnvelope(stdout: string): SemaJsonEnvelope | null {
   for (const candidate of candidates) {
     try {
       const parsed = JSON.parse(candidate);
-      if (parsed && typeof parsed === "object" && typeof parsed.ok === "boolean") {
+      if (
+        parsed &&
+        typeof parsed === "object" &&
+        typeof parsed.ok === "boolean"
+      ) {
         return parsed as SemaJsonEnvelope;
       }
     } catch {
@@ -38,9 +42,15 @@ export function parseEnvelope(stdout: string): SemaJsonEnvelope | null {
   return null;
 }
 
-export function formatSemaError(error: SemaError | undefined, fallback = "unknown error"): string {
+export function formatSemaError(
+  error: SemaError | undefined,
+  fallback = "unknown error",
+): string {
   if (!error) return fallback;
-  const location = error.line != null ? ` (line ${error.line}${error.col != null ? `:${error.col}` : ""})` : "";
+  const location =
+    error.line != null
+      ? ` (line ${error.line}${error.col != null ? `:${error.col}` : ""})`
+      : "";
   const hint = error.hint ? `\nhint: ${error.hint}` : "";
   return `${error.message}${location}${hint}`;
 }

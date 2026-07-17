@@ -1,4 +1,10 @@
-import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import {
+  readdirSync,
+  readFileSync,
+  writeFileSync,
+  existsSync,
+  statSync,
+} from "node:fs";
 import { join, relative, dirname, isAbsolute, resolve } from "node:path";
 import { ensureDir, tiers, tierRoot } from "../paths.js";
 import type { Tier, TierName } from "../paths.js";
@@ -36,18 +42,30 @@ export class LibraryStore {
     return this.list(kind).map((e) => e.path);
   }
 
-  save(tier: TierName, kind: ArtifactKind, name: string, source: string): string {
+  save(
+    tier: TierName,
+    kind: ArtifactKind,
+    name: string,
+    source: string,
+  ): string {
     const safe = sanitizeName(name);
-    const path = join(tierRoot(this.cwd, tier), kind, ...safe.split("/")) + ".sema";
+    const path =
+      join(tierRoot(this.cwd, tier), kind, ...safe.split("/")) + ".sema";
     ensureDir(dirname(path));
-    writeFileSync(path, source.endsWith("\n") ? source : source + "\n", "utf-8");
+    writeFileSync(
+      path,
+      source.endsWith("\n") ? source : source + "\n",
+      "utf-8",
+    );
     return path;
   }
 
   /** Resolve a logical name or a literal path to an artifact file. */
   resolve(kind: ArtifactKind, nameOrPath: string): LibraryEntry | null {
     if (nameOrPath.endsWith(".sema")) {
-      const abs = isAbsolute(nameOrPath) ? nameOrPath : resolve(this.cwd, nameOrPath);
+      const abs = isAbsolute(nameOrPath)
+        ? nameOrPath
+        : resolve(this.cwd, nameOrPath);
       if (existsSync(abs) && statSync(abs).isFile()) {
         return { name: nameOrPath, path: abs, tier: "project", kind };
       }
@@ -70,7 +88,12 @@ export function sanitizeName(name: string): string {
     .replace(/[^a-zA-Z0-9_/-]/g, "_")
     .replace(/\/+/g, "/")
     .replace(/(^\/|\/$)/g, "");
-  if (!cleaned || cleaned.split("/").some((part) => part === "" || part === "." || part === "..")) {
+  if (
+    !cleaned ||
+    cleaned
+      .split("/")
+      .some((part) => part === "" || part === "." || part === "..")
+  ) {
     throw new Error(`invalid artifact name: ${JSON.stringify(name)}`);
   }
   return cleaned;
@@ -91,7 +114,10 @@ function scanKind(tier: Tier, kind: ArtifactKind): LibraryEntry[] {
       if (entry.isDirectory()) walk(full);
       else if (entry.isFile() && entry.name.endsWith(".sema")) {
         out.push({
-          name: relative(root, full).replace(/\.sema$/, "").split("\\").join("/"),
+          name: relative(root, full)
+            .replace(/\.sema$/, "")
+            .split("\\")
+            .join("/"),
           path: full,
           tier: tier.name,
           kind,

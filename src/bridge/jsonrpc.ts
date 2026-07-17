@@ -48,20 +48,35 @@ export class JsonRpcClient {
     private readonly closeDetail?: () => string,
   ) {
     stdout.on("data", (chunk: Buffer) => this.onData(chunk.toString("utf-8")));
-    stdout.on("close", () => this.dispose(new Error(`sema mcp stdout closed${this.closeDetail?.() ?? ""}`)));
+    stdout.on("close", () =>
+      this.dispose(
+        new Error(`sema mcp stdout closed${this.closeDetail?.() ?? ""}`),
+      ),
+    );
   }
 
-  request<T = unknown>(method: string, params?: unknown, timeoutMs = 30_000): Promise<T> {
-    if (this.disposed) return Promise.reject(new Error("jsonrpc client disposed"));
+  request<T = unknown>(
+    method: string,
+    params?: unknown,
+    timeoutMs = 30_000,
+  ): Promise<T> {
+    if (this.disposed)
+      return Promise.reject(new Error("jsonrpc client disposed"));
     const id = this.nextId++;
     const line = JSON.stringify({ jsonrpc: "2.0", id, method, params }) + "\n";
     return new Promise<T>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error(`jsonrpc request ${method} timed out after ${timeoutMs}ms`));
+        reject(
+          new Error(`jsonrpc request ${method} timed out after ${timeoutMs}ms`),
+        );
       }, timeoutMs);
       timer.unref();
-      this.pending.set(id, { resolve: resolve as (v: unknown) => void, reject, timer });
+      this.pending.set(id, {
+        resolve: resolve as (v: unknown) => void,
+        reject,
+        timer,
+      });
       this.stdin.write(line, (err) => {
         if (err) {
           clearTimeout(timer);
@@ -165,6 +180,10 @@ export async function mcpCallTool(
   args: unknown,
   timeoutMs = 120_000,
 ): Promise<McpCallResult> {
-  const result = await client.request<McpCallResult>("tools/call", { name, arguments: args ?? {} }, timeoutMs);
+  const result = await client.request<McpCallResult>(
+    "tools/call",
+    { name, arguments: args ?? {} },
+    timeoutMs,
+  );
   return { content: result.content ?? [], isError: result.isError };
 }

@@ -3,7 +3,9 @@ import { parseEnvelope, formatSemaError } from "../src/envelope.js";
 
 describe("parseEnvelope", () => {
   it("parses a success envelope", () => {
-    const env = parseEnvelope('{"ok":true,"value":"3","stdout":"","stderr":"","elapsedMs":1}');
+    const env = parseEnvelope(
+      '{"ok":true,"value":"3","stdout":"","stderr":"","elapsedMs":1}',
+    );
     expect(env).not.toBeNull();
     expect(env!.ok).toBe(true);
     expect(env!.value).toBe("3");
@@ -33,7 +35,12 @@ describe("parseEnvelope", () => {
 
 describe("formatSemaError", () => {
   it("includes location and hint", () => {
-    const msg = formatSemaError({ message: "boom", hint: "try x", line: 3, col: 7 });
+    const msg = formatSemaError({
+      message: "boom",
+      hint: "try x",
+      line: 3,
+      col: 7,
+    });
     expect(msg).toBe("boom (line 3:7)\nhint: try x");
   });
 

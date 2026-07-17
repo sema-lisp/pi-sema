@@ -9,7 +9,9 @@ describe("mergeConfig", () => {
   });
 
   it("deep-merges nested sections without clobbering siblings", () => {
-    const cfg = mergeConfig(DEFAULT_CONFIG, { sandbox: { workflows: "strict" } });
+    const cfg = mergeConfig(DEFAULT_CONFIG, {
+      sandbox: { workflows: "strict" },
+    });
     expect(cfg.sandbox.workflows).toBe("strict");
     expect(cfg.sandbox.mcp).toBe("all"); // sibling untouched
   });
@@ -30,7 +32,9 @@ describe("mergeConfig", () => {
   });
 
   it("null overlays are skipped", () => {
-    const cfg = mergeConfig(DEFAULT_CONFIG, null, { ui: { dashboardShortcut: "ctrl+w" } });
+    const cfg = mergeConfig(DEFAULT_CONFIG, null, {
+      ui: { dashboardShortcut: "ctrl+w" },
+    });
     expect(cfg.ui.dashboardShortcut).toBe("ctrl+w");
   });
 });

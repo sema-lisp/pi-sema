@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeSchema, toPiToolName, expandExcludes } from "../src/bridge/schema.js";
+import {
+  sanitizeSchema,
+  toPiToolName,
+  expandExcludes,
+} from "../src/bridge/schema.js";
 
 describe("sanitizeSchema", () => {
   it("passes through a normal MCP inputSchema", () => {
@@ -16,13 +20,21 @@ describe("sanitizeSchema", () => {
   it("normalizes degenerate schemas", () => {
     const empty = sanitizeSchema(undefined) as any;
     expect(empty).toEqual({ type: "object", properties: {} });
-    const noProps = sanitizeSchema({ type: "object", $schema: "x", $id: "y" }) as any;
+    const noProps = sanitizeSchema({
+      type: "object",
+      $schema: "x",
+      $id: "y",
+    }) as any;
     expect(noProps.$schema).toBeUndefined();
     expect(noProps.properties).toEqual({});
   });
 
   it("drops a malformed required field", () => {
-    const schema = sanitizeSchema({ type: "object", properties: {}, required: "code" }) as any;
+    const schema = sanitizeSchema({
+      type: "object",
+      properties: {},
+      required: "code",
+    }) as any;
     expect(schema.required).toBeUndefined();
   });
 });
@@ -41,10 +53,19 @@ describe("toPiToolName", () => {
 });
 
 describe("expandExcludes", () => {
-  const names = ["eval", "run_file", "docs", "notebook/read", "notebook/eval_cell"];
+  const names = [
+    "eval",
+    "run_file",
+    "docs",
+    "notebook/read",
+    "notebook/eval_cell",
+  ];
 
   it("expands globs against real names", () => {
-    expect(expandExcludes(["notebook/*"], names)).toEqual(["notebook/read", "notebook/eval_cell"]);
+    expect(expandExcludes(["notebook/*"], names)).toEqual([
+      "notebook/read",
+      "notebook/eval_cell",
+    ]);
   });
 
   it("matches literals exactly", () => {

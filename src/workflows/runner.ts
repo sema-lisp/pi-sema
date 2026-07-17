@@ -2,7 +2,11 @@ import { Type } from "typebox";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
-import type { ExtensionAPI, AgentToolResult, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  AgentToolResult,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
 import { spawnSema } from "../sema.js";
 import { JournalTailer } from "./journal.js";
@@ -10,9 +14,19 @@ import { newRunState, reduceRun, type RunState } from "./model.js";
 import { formatRunLines } from "../ui/format.js";
 
 const params = Type.Object({
-  workflow: Type.String({ description: "Workflow name from the library, or a path to a .sema file" }),
-  args: Type.Optional(Type.Record(Type.String(), Type.Unknown(), { description: "Workflow args, passed as --args JSON" })),
-  resume: Type.Optional(Type.String({ description: "Run id to resume (memoized leaves replay for free)" })),
+  workflow: Type.String({
+    description: "Workflow name from the library, or a path to a .sema file",
+  }),
+  args: Type.Optional(
+    Type.Record(Type.String(), Type.Unknown(), {
+      description: "Workflow args, passed as --args JSON",
+    }),
+  ),
+  resume: Type.Optional(
+    Type.String({
+      description: "Run id to resume (memoized leaves replay for free)",
+    }),
+  ),
 });
 
 export interface RunOutcome {
@@ -58,7 +72,16 @@ export async function runWorkflow(opts: {
   tailer.start();
 
   try {
-    const args = ["workflow", "run", opts.file, "--args", JSON.stringify(opts.args), "--run-dir", opts.runRoot, "--no-auth-prompt"];
+    const args = [
+      "workflow",
+      "run",
+      opts.file,
+      "--args",
+      JSON.stringify(opts.args),
+      "--run-dir",
+      opts.runRoot,
+      "--no-auth-prompt",
+    ];
     if (opts.resume) args.push("--resume", opts.resume);
     const proc = await spawnSema(args, {
       cwd: opts.cwd,
@@ -69,7 +92,9 @@ export async function runWorkflow(opts: {
 
     let resultJson: unknown;
     try {
-      resultJson = JSON.parse(readFileSync(join(runDir, "result.json"), "utf-8"));
+      resultJson = JSON.parse(
+        readFileSync(join(runDir, "result.json"), "utf-8"),
+      );
     } catch {
       // no result.json (crash / kill) — journal state is the source of truth
     }
@@ -80,24 +105,42 @@ export async function runWorkflow(opts: {
   }
 }
 
-export function registerWorkflowRunTool(pi: ExtensionAPI, getRuntime: () => PiSemaRuntime | null): void {
+export function registerWorkflowRunTool(
+  pi: ExtensionAPI,
+  getRuntime: () => PiSemaRuntime | null,
+): void {
   pi.registerTool({
     name: "sema_workflow_run",
     label: "Run Sema workflow",
     description:
       "Run a Sema workflow from the library (or a .sema file path) with live status. Journaled and resumable: pass resume=<run_id> to replay memoized steps for free after a failure. Workflows may spend real LLM tokens — their :budget meta caps spend. Exit status needs-auth means the user must run the printed `sema mcp login` command first.",
-    promptSnippet: "Run a stored Sema workflow (journaled, resumable, live status)",
+    promptSnippet:
+      "Run a stored Sema workflow (journaled, resumable, live status)",
     parameters: params,
-    async execute(_id, p, signal, onUpdate, ctx): Promise<AgentToolResult<{ isError?: boolean; runId?: string }>> {
+    async execute(
+      _id,
+      p,
+      signal,
+      onUpdate,
+      ctx,
+    ): Promise<AgentToolResult<{ isError?: boolean; runId?: string }>> {
       const runtime = getRuntime();
       if (!runtime) {
-        return { content: [{ type: "text", text: "pi-sema is not initialized" }], details: { isError: true } };
+        return {
+          content: [{ type: "text", text: "pi-sema is not initialized" }],
+          details: { isError: true },
+        };
       }
       const entry = runtime.store.resolve("workflows", p.workflow);
       if (!entry) {
         const known = runtime.store.list("workflows").map((e) => e.name);
         return {
-          content: [{ type: "text", text: `unknown workflow "${p.workflow}". Known: ${known.join(", ") || "(none)"}` }],
+          content: [
+            {
+              type: "text",
+              text: `unknown workflow "${p.workflow}". Known: ${known.join(", ") || "(none)"}`,
+            },
+          ],
           details: { isError: true },
         };
       }
@@ -113,7 +156,10 @@ export function registerWorkflowRunTool(pi: ExtensionAPI, getRuntime: () => PiSe
         signal,
         onState: (state) => {
           const lines = formatRunLines(state);
-          onUpdate?.({ content: [{ type: "text", text: lines.join("\n") }], details: { runId: state.runId } });
+          onUpdate?.({
+            content: [{ type: "text", text: lines.join("\n") }],
+            details: { runId: state.runId },
+          });
           setWidgetSafe(ctx, widgetKey, lines);
         },
       });
@@ -124,7 +170,11 @@ export function registerWorkflowRunTool(pi: ExtensionAPI, getRuntime: () => PiSe
   });
 }
 
-function setWidgetSafe(ctx: ExtensionContext, key: string, lines: string[] | undefined): void {
+function setWidgetSafe(
+  ctx: ExtensionContext,
+  key: string,
+  lines: string[] | undefined,
+): void {
   try {
     ctx.ui.setWidget(key, lines);
   } catch {
@@ -132,13 +182,17 @@ function setWidgetSafe(ctx: ExtensionContext, key: string, lines: string[] | und
   }
 }
 
-export function finalResult(outcome: RunOutcome): AgentToolResult<{ isError?: boolean; runId?: string }> {
+export function finalResult(
+  outcome: RunOutcome,
+): AgentToolResult<{ isError?: boolean; runId?: string }> {
   const { state, runId } = outcome;
   const lines = formatRunLines(state);
   const details: { isError?: boolean; runId?: string } = { runId };
 
   if (state.status === "needs-auth") {
-    const logins = state.authRequired.map((a) => `sema mcp login ${a.server ?? ""}`.trim());
+    const logins = state.authRequired.map((a) =>
+      `sema mcp login ${a.server ?? ""}`.trim(),
+    );
     return {
       content: [
         {
@@ -163,11 +217,22 @@ export function finalResult(outcome: RunOutcome): AgentToolResult<{ isError?: bo
   }
 
   const value =
-    outcome.resultJson && typeof outcome.resultJson === "object" && "value" in (outcome.resultJson as object)
-      ? JSON.stringify((outcome.resultJson as { value: unknown }).value, null, 2)
+    outcome.resultJson &&
+    typeof outcome.resultJson === "object" &&
+    "value" in (outcome.resultJson as object)
+      ? JSON.stringify(
+          (outcome.resultJson as { value: unknown }).value,
+          null,
+          2,
+        )
       : undefined;
   return {
-    content: [{ type: "text", text: `${lines.join("\n")}${value ? `\n\nResult:\n${value}` : ""}` }],
+    content: [
+      {
+        type: "text",
+        text: `${lines.join("\n")}${value ? `\n\nResult:\n${value}` : ""}`,
+      },
+    ],
     details,
   };
 }

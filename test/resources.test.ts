@@ -28,7 +28,9 @@ describe("packaged skills", () => {
     for (const dir of readdirSync(join(ROOT, "skills"))) {
       const fm = frontmatter(join(ROOT, "skills", dir, "SKILL.md"));
       expect(fm.name, `${dir} name`).toBe(dir);
-      expect(fm.description?.length ?? 0, `${dir} description`).toBeGreaterThan(40);
+      expect(fm.description?.length ?? 0, `${dir} description`).toBeGreaterThan(
+        40,
+      );
     }
   });
 });
@@ -40,14 +42,21 @@ describe("packaged prompt templates", () => {
   });
 
   it("every template has a description and substitutes arguments", () => {
-    const files = readdirSync(join(ROOT, "prompts")).filter((f) => f.endsWith(".md"));
+    const files = readdirSync(join(ROOT, "prompts")).filter((f) =>
+      f.endsWith(".md"),
+    );
     expect(files.length).toBeGreaterThan(0);
     for (const file of files) {
       const path = join(ROOT, "prompts", file);
       const fm = frontmatter(path);
-      expect(fm.description?.length ?? 0, `${file} description`).toBeGreaterThan(10);
+      expect(
+        fm.description?.length ?? 0,
+        `${file} description`,
+      ).toBeGreaterThan(10);
       const body = readFileSync(path, "utf8");
-      expect(body, `${file} should use $ARGUMENTS/$1 substitution`).toMatch(/\$(ARGUMENTS|@|\d)/);
+      expect(body, `${file} should use $ARGUMENTS/$1 substitution`).toMatch(
+        /\$(ARGUMENTS|@|\d)/,
+      );
     }
   });
 });

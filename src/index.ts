@@ -1,6 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { isSemaInstalled, semaVersion, spawnSema } from "./sema.js";
-import { loadConfig, registerConfigFlags, type PiSemaConfig } from "./config.js";
+import {
+  loadConfig,
+  registerConfigFlags,
+  type PiSemaConfig,
+} from "./config.js";
 import { LibraryStore } from "./library/store.js";
 import { SemaBridge } from "./bridge/bridge.js";
 import { registerContextHooks } from "./hooks/context.js";
@@ -36,14 +40,19 @@ export default function (pi: ExtensionAPI) {
 
     const cfg = loadConfig(ctx.cwd, pi, (msg) => ctx.ui.notify(msg, "warning"));
     const store = new LibraryStore(ctx.cwd);
-    const bridge = new SemaBridge(pi, cfg, store, (msg, type) => ctx.ui.notify(msg, type));
+    const bridge = new SemaBridge(pi, cfg, store, (msg, type) =>
+      ctx.ui.notify(msg, type),
+    );
     bridge.registerStatusTool();
     runtime = { cfg, store, bridge };
 
     try {
       await bridge.start(ctx.cwd, await mcpSandboxSupported());
     } catch (err) {
-      ctx.ui.notify(`pi-sema: MCP bridge failed to start: ${err instanceof Error ? err.message : err}`, "error");
+      ctx.ui.notify(
+        `pi-sema: MCP bridge failed to start: ${err instanceof Error ? err.message : err}`,
+        "error",
+      );
     }
   });
 

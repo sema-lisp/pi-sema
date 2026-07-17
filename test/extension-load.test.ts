@@ -33,9 +33,22 @@ describe.skipIf(!existsSync(DIST))("built extension loads", () => {
     const factory = (await import(DIST)).default as (api: typeof pi) => void;
     factory(pi);
 
-    expect(commands.sort()).toEqual(["sema:forge", "sema:tools", "sema:workflow", "sema:workflows"]);
-    expect(tools.sort()).toEqual(["create_sema_tool", "sema_workflow_run", "submit_sema_workflow"]);
-    expect(flags.sort()).toEqual(["sema-budget", "sema-exclude", "sema-sandbox"]);
+    expect(commands.sort()).toEqual([
+      "sema:forge",
+      "sema:tools",
+      "sema:workflow",
+      "sema:workflows",
+    ]);
+    expect(tools.sort()).toEqual([
+      "create_sema_tool",
+      "sema_workflow_run",
+      "submit_sema_workflow",
+    ]);
+    expect(flags.sort()).toEqual([
+      "sema-budget",
+      "sema-exclude",
+      "sema-sandbox",
+    ]);
     expect(events).toContain("session_start");
     expect(events).toContain("session_shutdown");
     expect(events).toContain("before_agent_start");

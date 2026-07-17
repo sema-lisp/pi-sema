@@ -15,7 +15,10 @@ export function formatBudget(state: RunState): string {
   const { inputTokens, outputTokens, costUsd, limit } = state.budget;
   if (inputTokens === 0 && outputTokens === 0) return "";
   const tokens = `${compact(inputTokens)}→${compact(outputTokens)} tok`;
-  const cost = costUsd != null ? ` · $${costUsd.toFixed(2)}${limit ? `/${limit}` : ""}` : "";
+  const cost =
+    costUsd != null
+      ? ` · $${costUsd.toFixed(2)}${limit ? `/${limit}` : ""}`
+      : "";
   return `${tokens}${cost}`;
 }
 
@@ -23,32 +26,52 @@ export function formatBudget(state: RunState): string {
 export function formatRunSummary(state: RunState): string {
   const name = state.workflow ?? state.runId ?? "workflow";
   const running = state.phases.find((p) => p.status === "running");
-  const done = state.phases.filter((p) => p.status === "success" || p.status === "failed").length;
+  const done = state.phases.filter(
+    (p) => p.status === "success" || p.status === "failed",
+  ).length;
   const phasePart =
-    state.phases.length > 0 ? ` · ${running ? running.name : "…"} (${done}/${state.phases.length})` : "";
+    state.phases.length > 0
+      ? ` · ${running ? running.name : "…"} (${done}/${state.phases.length})`
+      : "";
   const agents = [...state.agents.values()];
   const liveAgents = agents.filter((a) => a.status === "running").length;
-  const agentPart = agents.length > 0 ? ` · ${liveAgents > 0 ? `${liveAgents} live/` : ""}${agents.length} agents` : "";
+  const agentPart =
+    agents.length > 0
+      ? ` · ${liveAgents > 0 ? `${liveAgents} live/` : ""}${agents.length} agents`
+      : "";
   const budget = formatBudget(state);
   const statusMark =
-    state.status === "live" ? "▶" : state.status === "success" ? "✓" : state.status === "needs-auth" ? "🔑" : "✗";
+    state.status === "live"
+      ? "▶"
+      : state.status === "success"
+        ? "✓"
+        : state.status === "needs-auth"
+          ? "🔑"
+          : "✗";
   return `${statusMark} ${name}${phasePart}${agentPart}${budget ? ` · ${budget}` : ""}`;
 }
 
 /** Multi-line render for the widget and the inline streaming tool result. */
-export function formatRunLines(state: RunState, opts: { maxAgents?: number } = {}): string[] {
+export function formatRunLines(
+  state: RunState,
+  opts: { maxAgents?: number } = {},
+): string[] {
   const lines: string[] = [formatRunSummary(state)];
 
   for (const phase of state.phases) {
     const dur = phase.durMs != null ? ` (${formatMs(phase.durMs)})` : "";
     lines.push(`  ${statusGlyph(phase.status)} ${phase.name}${dur}`);
     if (phase.status === "running") {
-      const agents = [...state.agents.values()].filter((a) => a.phaseName === phase.name);
+      const agents = [...state.agents.values()].filter(
+        (a) => a.phaseName === phase.name,
+      );
       const shown = agents.slice(-(opts.maxAgents ?? 6));
       for (const agent of shown) {
-        const mark = agent.status === "running" ? "◐" : agent.status === "ok" ? "●" : "✗";
+        const mark =
+          agent.status === "running" ? "◐" : agent.status === "ok" ? "●" : "✗";
         const lastTool = agent.toolCalls.at(-1);
-        const tool = agent.status === "running" && lastTool ? ` → ${lastTool.tool}` : "";
+        const tool =
+          agent.status === "running" && lastTool ? ` → ${lastTool.tool}` : "";
         lines.push(`      ${mark} ${agent.agentId}${tool}`);
       }
       if (agents.length > shown.length) {
@@ -58,7 +81,9 @@ export function formatRunLines(state: RunState, opts: { maxAgents?: number } = {
   }
 
   if (state.status === "needs-auth") {
-    lines.push(`  🔑 auth required${state.authRequired[0]?.server ? `: sema mcp login ${state.authRequired[0].server}` : ""}`);
+    lines.push(
+      `  🔑 auth required${state.authRequired[0]?.server ? `: sema mcp login ${state.authRequired[0].server}` : ""}`,
+    );
   }
   if (state.status === "failed" && state.reason) {
     lines.push(`  ✗ ${state.reason}`);

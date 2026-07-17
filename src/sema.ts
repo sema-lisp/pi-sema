@@ -26,7 +26,10 @@ export interface SpawnSemaResult {
 const SEMA_BIN = "sema";
 
 /** Run `sema <args>` to completion with caller-enforced timeout and abort. */
-export function spawnSema(args: string[], opts: SpawnSemaOptions = {}): Promise<SpawnSemaResult> {
+export function spawnSema(
+  args: string[],
+  opts: SpawnSemaOptions = {},
+): Promise<SpawnSemaResult> {
   return new Promise((resolve) => {
     const child = spawn(SEMA_BIN, args, {
       cwd: opts.cwd,
@@ -94,7 +97,14 @@ export async function isSemaInstalled(): Promise<boolean> {
   return (await semaVersion()) !== null;
 }
 
-const SKIP_DIRS = new Set(["node_modules", ".git", "target", "dist", ".worktrees", ".sema"]);
+const SKIP_DIRS = new Set([
+  "node_modules",
+  ".git",
+  "target",
+  "dist",
+  ".worktrees",
+  ".sema",
+]);
 
 const semaFilesCache = new Map<string, boolean>();
 
@@ -120,7 +130,11 @@ function scanForSema(dir: string, depth: number): boolean {
     if (entry.isFile() && entry.name.endsWith(".sema")) return true;
   }
   for (const entry of entries) {
-    if (entry.isDirectory() && !SKIP_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
+    if (
+      entry.isDirectory() &&
+      !SKIP_DIRS.has(entry.name) &&
+      !entry.name.startsWith(".")
+    ) {
       if (scanForSema(join(dir, entry.name), depth - 1)) return true;
     }
   }

@@ -3,7 +3,12 @@ import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { PiSemaConfig } from "../config.js";
 import type { LibraryStore } from "../library/store.js";
 import { McpProcess } from "./process.js";
-import { mcpListTools, mcpCallTool, type McpCallResult, type McpTool } from "./jsonrpc.js";
+import {
+  mcpListTools,
+  mcpCallTool,
+  type McpCallResult,
+  type McpTool,
+} from "./jsonrpc.js";
 import { sanitizeSchema, toPiToolName, expandExcludes } from "./schema.js";
 import { spawnSema } from "../sema.js";
 
@@ -37,7 +42,10 @@ export class SemaBridge {
     private readonly pi: ExtensionAPI,
     private readonly cfg: PiSemaConfig,
     private readonly store: LibraryStore,
-    private readonly notify: (msg: string, type?: "info" | "warning" | "error") => void,
+    private readonly notify: (
+      msg: string,
+      type?: "info" | "warning" | "error",
+    ) => void,
   ) {}
 
   get running(): boolean {
@@ -66,7 +74,10 @@ export class SemaBridge {
           `registered tools: ${bridge.registered.size} (${[...bridge.registered.values()].join(", ") || "none"})`,
           `excluded: ${[...bridge.excluded].join(", ") || "none"}`,
         ];
-        return { content: [{ type: "text", text: lines.join("\n") }], details: {} };
+        return {
+          content: [{ type: "text", text: lines.join("\n") }],
+          details: {},
+        };
       },
     });
   }
@@ -84,7 +95,11 @@ export class SemaBridge {
       toolFiles: this.store.filePaths("tools"),
       cwd,
       sandbox: sandbox !== "all" && sandboxSupported ? sandbox : undefined,
-      onCrash: (code) => this.notify(`pi-sema: sema mcp crashed repeatedly (exit ${code}) — bridge offline`, "error"),
+      onCrash: (code) =>
+        this.notify(
+          `pi-sema: sema mcp crashed repeatedly (exit ${code}) — bridge offline`,
+          "error",
+        ),
     });
     await this.process.start();
     await this.refresh();
@@ -103,7 +118,12 @@ export class SemaBridge {
     if (!this.process?.running) return [];
     const tools = await mcpListTools(this.process.client);
 
-    this.excluded = new Set(expandExcludes(this.cfg.excludeTools, tools.map((t) => t.name)));
+    this.excluded = new Set(
+      expandExcludes(
+        this.cfg.excludeTools,
+        tools.map((t) => t.name),
+      ),
+    );
 
     const added: string[] = [];
     for (const tool of tools) {
@@ -134,7 +154,8 @@ export class SemaBridge {
 
   /** Evaluate source in the live server env (used by forge to inject deftools). */
   async injectSource(source: string): Promise<McpCallResult> {
-    if (!this.process?.running) throw new Error("sema mcp bridge is not running");
+    if (!this.process?.running)
+      throw new Error("sema mcp bridge is not running");
     return mcpCallTool(this.process.client, "eval", { code: source }, 60_000);
   }
 
@@ -157,17 +178,31 @@ export class SemaBridge {
         // Sandbox parity with the bridge: the top-level --sandbox flag uses
         // the same grammar the mcp server would apply.
         const args: string[] = [];
-        if (bridge.cfg.sandbox.mcp !== "all") args.push("--sandbox", bridge.cfg.sandbox.mcp);
+        if (bridge.cfg.sandbox.mcp !== "all")
+          args.push("--sandbox", bridge.cfg.sandbox.mcp);
         args.push(p.file_path);
-        if (p.arguments && p.arguments.length > 0) args.push("--", ...p.arguments);
-        const result = await spawnSema(args, { cwd: bridge.cwd, timeoutMs: RUN_FILE_TIMEOUT_MS, signal });
-        const text = [result.stdout.trim(), result.stderr.trim()].filter(Boolean).join("\n--- stderr ---\n");
+        if (p.arguments && p.arguments.length > 0)
+          args.push("--", ...p.arguments);
+        const result = await spawnSema(args, {
+          cwd: bridge.cwd,
+          timeoutMs: RUN_FILE_TIMEOUT_MS,
+          signal,
+        });
+        const text = [result.stdout.trim(), result.stderr.trim()]
+          .filter(Boolean)
+          .join("\n--- stderr ---\n");
         if (result.killed) {
-          return { content: [{ type: "text", text: `${text}\n(killed: timeout or abort)` }], details: { isError: true } };
+          return {
+            content: [
+              { type: "text", text: `${text}\n(killed: timeout or abort)` },
+            ],
+            details: { isError: true },
+          };
         }
         return {
           content: [{ type: "text", text: text || "(no output)" }],
-          details: result.code === 0 ? {} : { isError: true, exitCode: result.code },
+          details:
+            result.code === 0 ? {} : { isError: true, exitCode: result.code },
         };
       },
     });
@@ -193,27 +228,50 @@ export class SemaBridge {
       description: tool.description ?? `Sema MCP tool ${tool.name}`,
       parameters: sanitizeSchema(tool.inputSchema),
       promptSnippet: PROMPT_SNIPPETS[tool.name],
-      async execute(_toolCallId, params, signal): Promise<AgentToolResult<unknown>> {
+      async execute(
+        _toolCallId,
+        params,
+        signal,
+      ): Promise<AgentToolResult<unknown>> {
         if (!bridge.process?.running) {
           return {
-            content: [{ type: "text", text: "sema mcp bridge is not running (binary missing or crashed)" }],
+            content: [
+              {
+                type: "text",
+                text: "sema mcp bridge is not running (binary missing or crashed)",
+              },
+            ],
             details: { isError: true },
           };
         }
-        const call = mcpCallTool(bridge.process.client, tool.name, params, CALL_TIMEOUT_MS);
+        const call = mcpCallTool(
+          bridge.process.client,
+          tool.name,
+          params,
+          CALL_TIMEOUT_MS,
+        );
         const result = await raceAbort(call, signal);
         if (result === ABORTED) {
-          return { content: [{ type: "text", text: "aborted" }], details: { isError: true } };
+          return {
+            content: [{ type: "text", text: "aborted" }],
+            details: { isError: true },
+          };
         }
 
         // Self-extension fast path: evals that define tools re-sync the registry
         // so the agent can call what it just defined on the next turn.
-        if (tool.name === "eval" && typeof (params as any)?.code === "string" && /\(deftool\s/.test((params as any).code)) {
+        if (
+          tool.name === "eval" &&
+          typeof (params as any)?.code === "string" &&
+          /\(deftool\s/.test((params as any).code)
+        ) {
           bridge.refresh().catch(() => {});
         }
 
         const text = result.content
-          .map((block) => (block.type === "text" ? (block.text ?? "") : `[${block.type}]`))
+          .map((block) =>
+            block.type === "text" ? (block.text ?? "") : `[${block.type}]`,
+          )
           .join("\n")
           .trim();
         return {
@@ -231,8 +289,15 @@ function runFileSchema(): ReturnType<typeof sanitizeSchema> {
   return sanitizeSchema({
     type: "object",
     properties: {
-      file_path: { type: "string", description: "Path to the .sema (or .semac) file to run" },
-      arguments: { type: "array", items: { type: "string" }, description: "Script arguments (passed after --)" },
+      file_path: {
+        type: "string",
+        description: "Path to the .sema (or .semac) file to run",
+      },
+      arguments: {
+        type: "array",
+        items: { type: "string" },
+        description: "Script arguments (passed after --)",
+      },
     },
     required: ["file_path"],
   });
@@ -240,7 +305,10 @@ function runFileSchema(): ReturnType<typeof sanitizeSchema> {
 
 const ABORTED = Symbol("aborted");
 
-function raceAbort<T>(promise: Promise<T>, signal: AbortSignal | undefined): Promise<T | typeof ABORTED> {
+function raceAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal | undefined,
+): Promise<T | typeof ABORTED> {
   if (!signal) return promise;
   if (signal.aborted) return Promise.resolve(ABORTED);
   return new Promise((resolve, reject) => {

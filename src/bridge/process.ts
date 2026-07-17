@@ -60,7 +60,9 @@ export class McpProcess {
     });
 
     child.on("close", (code) => {
-      this._client?.dispose(new Error(`sema mcp exited (code ${code}): ${stderrTail.trim()}`));
+      this._client?.dispose(
+        new Error(`sema mcp exited (code ${code}): ${stderrTail.trim()}`),
+      );
       this._client = null;
       this.child = null;
       if (!this.stopping) {
@@ -68,7 +70,8 @@ export class McpProcess {
         if (!this.restarted) {
           this.restarted = true;
           setTimeout(() => {
-            if (!this.stopping) void this.start().catch(() => this.opts.onCrash?.(code));
+            if (!this.stopping)
+              void this.start().catch(() => this.opts.onCrash?.(code));
           }, 1000).unref();
         } else {
           this.opts.onCrash?.(code);
@@ -79,7 +82,8 @@ export class McpProcess {
     this._client = new JsonRpcClient(
       child.stdin,
       child.stdout,
-      () => ` (exit code ${child.exitCode ?? "?"}; stderr tail: ${stderrTail.trim() || "<empty>"})`,
+      () =>
+        ` (exit code ${child.exitCode ?? "?"}; stderr tail: ${stderrTail.trim() || "<empty>"})`,
     );
     try {
       await mcpInitialize(this._client);

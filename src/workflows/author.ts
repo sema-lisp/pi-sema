@@ -2,7 +2,11 @@ import { Type } from "typebox";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { ExtensionAPI, AgentToolResult, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  AgentToolResult,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
 import { sanitizeName } from "../library/store.js";
 import { workflowCheck, formatDiagnostics } from "./check.js";
@@ -11,13 +15,19 @@ import { SUBMIT_WORKFLOW_DESCRIPTION } from "../forge/prompts.js";
 const params = Type.Object({
   name: Type.String({ description: "Workflow name, kebab-case" }),
   description: Type.String({ description: "One-line description" }),
-  source: Type.String({ description: "Complete Sema source containing exactly one (defworkflow …) form" }),
+  source: Type.String({
+    description:
+      "Complete Sema source containing exactly one (defworkflow …) form",
+  }),
   args: Type.Optional(
-    Type.Record(Type.String(), Type.Unknown(), { description: "Example args map the workflow expects (documentation only)" }),
+    Type.Record(Type.String(), Type.Unknown(), {
+      description: "Example args map the workflow expects (documentation only)",
+    }),
   ),
   tier: Type.Optional(
     Type.Union([Type.Literal("project"), Type.Literal("global")], {
-      description: "Storage tier; workflows default to project (they are usually project artifacts)",
+      description:
+        "Storage tier; workflows default to project (they are usually project artifacts)",
     }),
   ),
 });
@@ -45,9 +55,16 @@ export function summarizeWorkflow(source: string): string[] {
     lines.push(`Phases: ${names.join(" → ")}`);
   }
   const budget = /:budget\s*(\{[^}]*\})/.exec(source)?.[1];
-  lines.push(budget ? `Budget: ${budget}` : "Budget: NONE — unbounded LLM spend");
-  const fanouts = [...source.matchAll(/\(parallel\b[\s\S]*?(\d+)\s*\)/g)].map((m) => m[1]);
-  if (fanouts.length > 0) lines.push(`Parallel fan-out caps: ${fanouts.join(", ")} (engine max 8 by default)`);
+  lines.push(
+    budget ? `Budget: ${budget}` : "Budget: NONE — unbounded LLM spend",
+  );
+  const fanouts = [...source.matchAll(/\(parallel\b[\s\S]*?(\d+)\s*\)/g)].map(
+    (m) => m[1],
+  );
+  if (fanouts.length > 0)
+    lines.push(
+      `Parallel fan-out caps: ${fanouts.join(", ")} (engine max 8 by default)`,
+    );
   const steps = [...source.matchAll(/\(step\s/g)].length;
   lines.push(`LLM step leaves: ${steps}`);
   const loads = [...source.matchAll(/\(load\s+"([^"]+)"/g)].map((m) => m[1]);
@@ -81,7 +98,10 @@ export async function submitWorkflow(
 
   // Static validation — no LLM, no eval. Gate on error-level diagnostics only:
   // under --strict, warnings alone already flip the exit code.
-  const scratch = join(mkdtempSync(join(tmpdir(), "pi-sema-wf-check-")), `${name.replace(/\//g, "_")}.sema`);
+  const scratch = join(
+    mkdtempSync(join(tmpdir(), "pi-sema-wf-check-")),
+    `${name.replace(/\//g, "_")}.sema`,
+  );
   writeFileSync(scratch, p.source);
   const check = await workflowCheck(scratch, { cwd: ctx.cwd, signal });
   if (!check.ok) {
@@ -101,7 +121,10 @@ export async function submitWorkflow(
 
   // Preview + the human gate.
   const summary = summarizeWorkflow(p.source);
-  const warningText = check.warnings.length > 0 ? `\nWarnings:\n${formatDiagnostics(check.warnings)}` : "";
+  const warningText =
+    check.warnings.length > 0
+      ? `\nWarnings:\n${formatDiagnostics(check.warnings)}`
+      : "";
   let approved = true;
   let runNow = false;
   if (ctx.hasUI) {
@@ -111,16 +134,29 @@ export async function submitWorkflow(
     );
     if (!approved) {
       rounds.delete(name);
-      return fail("status: declined — the user rejected this workflow. Ask what to change; do not resubmit unchanged.");
+      return fail(
+        "status: declined — the user rejected this workflow. Ask what to change; do not resubmit unchanged.",
+      );
     }
-    runNow = await ctx.ui.confirm(`Run "${name}" now?`, "Runs with live status. LLM steps spend real tokens (capped by the workflow's :budget).");
+    runNow = await ctx.ui.confirm(
+      `Run "${name}" now?`,
+      "Runs with live status. LLM steps spend real tokens (capped by the workflow's :budget).",
+    );
   }
 
   const tier = p.tier ?? "project";
-  const path = runtime.store.save(tier, "workflows", name, `; ${p.description}\n${p.source.trim()}`);
+  const path = runtime.store.save(
+    tier,
+    "workflows",
+    name,
+    `; ${p.description}\n${p.source.trim()}`,
+  );
   rounds.delete(name);
 
-  const argsHint = p.args && Object.keys(p.args).length > 0 ? ` args=${JSON.stringify(p.args)}` : "";
+  const argsHint =
+    p.args && Object.keys(p.args).length > 0
+      ? ` args=${JSON.stringify(p.args)}`
+      : "";
   return {
     content: [
       {
@@ -136,13 +172,17 @@ export async function submitWorkflow(
   };
 }
 
-export function registerWorkflowAuthoring(pi: ExtensionAPI, getRuntime: () => PiSemaRuntime | null): void {
+export function registerWorkflowAuthoring(
+  pi: ExtensionAPI,
+  getRuntime: () => PiSemaRuntime | null,
+): void {
   const rounds = new Map<string, number>();
   pi.registerTool({
     name: "submit_sema_workflow",
     label: "Submit Sema workflow",
     description: SUBMIT_WORKFLOW_DESCRIPTION,
-    promptSnippet: "Validate + store an authored Sema workflow (checked, user-approved; run separately)",
+    promptSnippet:
+      "Validate + store an authored Sema workflow (checked, user-approved; run separately)",
     parameters: params,
     async execute(_id, p, signal, _onUpdate, ctx) {
       const runtime = getRuntime();
@@ -157,5 +197,7 @@ function fail(text: string): AgentToolResult<{ isError?: boolean }> {
 }
 
 function truncate(text: string, max: number): string {
-  return text.length <= max ? text : text.slice(0, max) + `\n… (${text.length - max} more chars)`;
+  return text.length <= max
+    ? text
+    : text.slice(0, max) + `\n… (${text.length - max} more chars)`;
 }

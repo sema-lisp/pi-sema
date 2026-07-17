@@ -1,10 +1,18 @@
 import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { matchesKey } from "@earendil-works/pi-tui";
-import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionContext,
+} from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
 import { JournalTailer, readJournalEvents } from "../workflows/journal.js";
-import { foldEvents, newRunState, reduceRun, type RunState } from "../workflows/model.js";
+import {
+  foldEvents,
+  newRunState,
+  reduceRun,
+  type RunState,
+} from "../workflows/model.js";
 import { formatRunLines, formatRunSummary, formatMs } from "./format.js";
 import { defaultRunRoot } from "../workflows/runner.js";
 import { DEFAULT_CONFIG } from "../config.js";
@@ -32,7 +40,13 @@ export function listRuns(runRoot: string): RunListing[] {
     try {
       const mtimeMs = statSync(journal).mtimeMs;
       const state = foldEvents(readJournalEvents(dir));
-      runs.push({ runId: name, dir, mtimeMs, state, live: state.status === "live" });
+      runs.push({
+        runId: name,
+        dir,
+        mtimeMs,
+        state,
+        live: state.status === "live",
+      });
     } catch {
       // not a run dir
     }
@@ -40,17 +54,30 @@ export function listRuns(runRoot: string): RunListing[] {
   return runs.sort((a, b) => b.mtimeMs - a.mtimeMs);
 }
 
-export function registerDashboard(pi: ExtensionAPI, getRuntime: () => PiSemaRuntime | null): void {
+export function registerDashboard(
+  pi: ExtensionAPI,
+  getRuntime: () => PiSemaRuntime | null,
+): void {
   const open = async (ctx: ExtensionContext) => {
     if (ctx.mode !== "tui") {
-      ctx.ui.notify("The workflow dashboard needs the TUI. Runs live in .sema/runs/ — inspect with `sema workflow view`.", "warning");
+      ctx.ui.notify(
+        "The workflow dashboard needs the TUI. Runs live in .sema/runs/ — inspect with `sema workflow view`.",
+        "warning",
+      );
       return;
     }
     const runtime = getRuntime();
-    const runRoot = defaultRunRoot(ctx.cwd, runtime?.cfg.workflows.runDir ?? null);
+    const runRoot = defaultRunRoot(
+      ctx.cwd,
+      runtime?.cfg.workflows.runDir ?? null,
+    );
     await ctx.ui.custom<void>(
-      (tui, _theme, _keybindings, done) => new DashboardComponent(runRoot, () => tui.requestRender(), done),
-      { overlay: true, overlayOptions: { anchor: "center", width: "80%", maxHeight: "70%" } },
+      (tui, _theme, _keybindings, done) =>
+        new DashboardComponent(runRoot, () => tui.requestRender(), done),
+      {
+        overlay: true,
+        overlayOptions: { anchor: "center", width: "80%", maxHeight: "70%" },
+      },
     );
   };
 
@@ -67,9 +94,13 @@ export function registerDashboard(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
 /** Shortcut must be known at registration time — global config only (no cwd yet). */
 function readConfiguredShortcut(): string {
   try {
-    const raw = readFileSync(join(process.env.HOME ?? "", ".pi", "agent", "pi-sema", "config.json"), "utf-8");
+    const raw = readFileSync(
+      join(process.env.HOME ?? "", ".pi", "agent", "pi-sema", "config.json"),
+      "utf-8",
+    );
     const parsed = JSON.parse(raw);
-    if (typeof parsed?.ui?.dashboardShortcut === "string") return parsed.ui.dashboardShortcut;
+    if (typeof parsed?.ui?.dashboardShortcut === "string")
+      return parsed.ui.dashboardShortcut;
   } catch {
     // fall through
   }
@@ -160,7 +191,10 @@ class DashboardComponent {
     }
     if (this.view === "list") {
       if (matchesKey(data, "down") || data === "j") {
-        this.selected = Math.min(this.selected + 1, Math.max(0, this.runs.length - 1));
+        this.selected = Math.min(
+          this.selected + 1,
+          Math.max(0, this.runs.length - 1),
+        );
       } else if (matchesKey(data, "up") || data === "k") {
         this.selected = Math.max(this.selected - 1, 0);
       } else if (matchesKey(data, "enter")) {
@@ -178,11 +212,16 @@ class DashboardComponent {
   }
 
   render(width: number): string[] {
-    return this.view === "list" ? this.renderList(width) : this.renderDetail(width);
+    return this.view === "list"
+      ? this.renderList(width)
+      : this.renderDetail(width);
   }
 
   private renderList(width: number): string[] {
-    const lines: string[] = ["Sema workflow runs — ↑/↓ select · enter details · esc close", ""];
+    const lines: string[] = [
+      "Sema workflow runs — ↑/↓ select · enter details · esc close",
+      "",
+    ];
     if (this.runs.length === 0) {
       lines.push(`(no runs under ${this.runRoot})`);
       return lines.map((l) => clip(l, width));
@@ -190,7 +229,9 @@ class DashboardComponent {
     this.runs.forEach((run, i) => {
       const cursor = i === this.selected ? "▸ " : "  ";
       const when = formatAge(Date.now() - run.mtimeMs);
-      lines.push(`${cursor}${formatRunSummary(run.state)} · ${run.runId} · ${when}`);
+      lines.push(
+        `${cursor}${formatRunSummary(run.state)} · ${run.runId} · ${when}`,
+      );
     });
     return lines.map((l) => clip(l, width));
   }
@@ -210,7 +251,8 @@ class DashboardComponent {
         lines.push(`  :${cp.key}${cp.value ? ` = ${clip(cp.value, 60)}` : ""}`);
       }
     }
-    if (state.durMs != null) lines.push("", `Duration: ${formatMs(state.durMs)}`);
+    if (state.durMs != null)
+      lines.push("", `Duration: ${formatMs(state.durMs)}`);
     const resultPath = join(run.dir, "result.json");
     if (!run.live && existsSync(resultPath)) {
       try {
@@ -225,7 +267,9 @@ class DashboardComponent {
 }
 
 function clip(line: string, width: number): string {
-  return line.length > width ? line.slice(0, Math.max(0, width - 1)) + "…" : line;
+  return line.length > width
+    ? line.slice(0, Math.max(0, width - 1)) + "…"
+    : line;
 }
 
 function formatAge(ms: number): string {

@@ -1,6 +1,9 @@
 import { Type } from "typebox";
 import { existsSync } from "node:fs";
-import type { ExtensionAPI, AgentToolResult } from "@earendil-works/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  AgentToolResult,
+} from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
 import { sanitizeName } from "../library/store.js";
 import type { TierName } from "../paths.js";
@@ -8,19 +11,31 @@ import { verifyToolSource, describeProbeFailure } from "./probe.js";
 import { CREATE_TOOL_DESCRIPTION, CREATE_TOOL_GUIDELINES } from "./prompts.js";
 
 const params = Type.Object({
-  name: Type.String({ description: "Tool name, kebab-case (e.g. pdf-extract). Namespacing with '/' is allowed." }),
-  description: Type.String({ description: "One-line description of what the tool does" }),
-  source: Type.String({ description: "Complete Sema source: optional helper defines + exactly one (deftool …) form" }),
+  name: Type.String({
+    description:
+      "Tool name, kebab-case (e.g. pdf-extract). Namespacing with '/' is allowed.",
+  }),
+  description: Type.String({
+    description: "One-line description of what the tool does",
+  }),
+  source: Type.String({
+    description:
+      "Complete Sema source: optional helper defines + exactly one (deftool …) form",
+  }),
   tier: Type.Optional(
     Type.Union([Type.Literal("project"), Type.Literal("global")], {
-      description: "Where to store it: project (.pi/pi-sema, travels with the repo) or global (~/.pi/agent/pi-sema). Omit to use the configured default.",
+      description:
+        "Where to store it: project (.pi/pi-sema, travels with the repo) or global (~/.pi/agent/pi-sema). Omit to use the configured default.",
     }),
   ),
 });
 
 type Details = { stage?: string; isError?: boolean };
 
-export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRuntime | null): void {
+export function registerForgeTool(
+  pi: ExtensionAPI,
+  getRuntime: () => PiSemaRuntime | null,
+): void {
   // Refinement rounds per tool name, reset on success. Keyed per session-runtime.
   const rounds = new Map<string, number>();
 
@@ -28,10 +43,17 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
     name: "create_sema_tool",
     label: "Forge Sema tool",
     description: CREATE_TOOL_DESCRIPTION,
-    promptSnippet: "Forge a persistent Sema tool from source (verified, user-approved, callable next turn)",
+    promptSnippet:
+      "Forge a persistent Sema tool from source (verified, user-approved, callable next turn)",
     promptGuidelines: CREATE_TOOL_GUIDELINES,
     parameters: params,
-    async execute(_toolCallId, p, signal, onUpdate, ctx): Promise<AgentToolResult<Details>> {
+    async execute(
+      _toolCallId,
+      p,
+      signal,
+      onUpdate,
+      ctx,
+    ): Promise<AgentToolResult<Details>> {
       const runtime = getRuntime();
       if (!runtime) {
         return fail("pi-sema is not initialized (sema binary missing?)");
@@ -46,7 +68,9 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
       }
       const deftoolName = extractDeftoolName(p.source);
       if (!deftoolName) {
-        return fail('source must contain exactly one (deftool <name> "description" {params} (lambda …)) form');
+        return fail(
+          'source must contain exactly one (deftool <name> "description" {params} (lambda …)) form',
+        );
       }
       if (deftoolName !== name.split("/").pop() && deftoolName !== name) {
         return fail(
@@ -55,7 +79,10 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
       }
 
       // 1. Verify in the strict sandbox (the ONLY place --no-llm is used).
-      onUpdate?.({ content: [{ type: "text", text: "verifying in strict sandbox…" }], details: { stage: "probe" } });
+      onUpdate?.({
+        content: [{ type: "text", text: "verifying in strict sandbox…" }],
+        details: { stage: "probe" },
+      });
       const probe = await verifyToolSource(p.source, deftoolName, {
         timeoutMs: cfg.forge.probeTimeoutMs,
         cwd: ctx.cwd,
@@ -83,7 +110,9 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
         );
         if (!approved) {
           rounds.delete(name);
-          return fail("status: declined — the user rejected this tool. Do not resubmit unchanged; ask them what to change.");
+          return fail(
+            "status: declined — the user rejected this tool. Do not resubmit unchanged; ask them what to change.",
+          );
         }
       }
 
@@ -99,16 +128,26 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
       }
       const targetPath = store.resolve("tools", name)?.path;
       const existed = targetPath != null && existsSync(targetPath);
-      const path = store.save(tier, "tools", name, `; ${p.description}\n${p.source.trim()}`);
+      const path = store.save(
+        tier,
+        "tools",
+        name,
+        `; ${p.description}\n${p.source.trim()}`,
+      );
 
       // 4. Inject into the live server env + 5. register with pi.
-      onUpdate?.({ content: [{ type: "text", text: "injecting into live environment…" }], details: { stage: "inject" } });
+      onUpdate?.({
+        content: [{ type: "text", text: "injecting into live environment…" }],
+        details: { stage: "inject" },
+      });
       let piName = `sema_${deftoolName.replace(/[^a-zA-Z0-9_]/g, "_")}`;
       if (bridge.running) {
         const injected = await bridge.injectSource(p.source);
         if (injected.isError) {
           const text = injected.content.map((c) => c.text ?? "").join("\n");
-          return fail(`stored to ${path}, but live injection failed: ${text}\nIt will load on next session start.`);
+          return fail(
+            `stored to ${path}, but live injection failed: ${text}\nIt will load on next session start.`,
+          );
         }
         await bridge.refresh();
         piName = bridge.piNameFor(deftoolName) ?? piName;

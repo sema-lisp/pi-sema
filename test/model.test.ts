@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { foldEvents, reduceRun, type JournalEvent } from "../src/workflows/model.js";
+import {
+  foldEvents,
+  reduceRun,
+  type JournalEvent,
+} from "../src/workflows/model.js";
 
 function loadFixture(name: string): JournalEvent[] {
   const raw = readFileSync(join(__dirname, "fixtures", name), "utf-8");
@@ -47,26 +51,66 @@ describe("reduceRun edge cases", () => {
 
   it("correlates agents by agent_id and attributes to the open phase", () => {
     const state = foldEvents([
-      { event: "run.started", seq: 0, ts: "t", workflow: "w", run_id: "r", phases: ["P"] },
+      {
+        event: "run.started",
+        seq: 0,
+        ts: "t",
+        workflow: "w",
+        run_id: "r",
+        phases: ["P"],
+      },
       { event: "phase.started", seq: 1, ts: "t", phase: "P" },
-      { event: "agent.started", seq: 2, ts: "t", agent_id: "writer_1", agent_name: "writer" },
-      { event: "agent.tool_call", seq: 3, ts: "t", agent_id: "writer_1", tool_name: "file/write" },
+      {
+        event: "agent.started",
+        seq: 2,
+        ts: "t",
+        agent_id: "writer_1",
+        agent_name: "writer",
+      },
+      {
+        event: "agent.tool_call",
+        seq: 3,
+        ts: "t",
+        agent_id: "writer_1",
+        tool_name: "file/write",
+      },
     ]);
     const agent = state.agents.get("writer_1")!;
     expect(agent.status).toBe("running"); // started without result = running
     expect(agent.phaseName).toBe("P");
     expect(agent.toolCalls).toHaveLength(1);
 
-    reduceRun(state, { event: "agent.result", seq: 4, ts: "t", agent_id: "writer_1", status: "ok", output: "done", dur_ms: 10 });
+    reduceRun(state, {
+      event: "agent.result",
+      seq: 4,
+      ts: "t",
+      agent_id: "writer_1",
+      status: "ok",
+      output: "done",
+      dur_ms: 10,
+    });
     expect(state.agents.get("writer_1")!.status).toBe("ok");
   });
 
   it("sums per-event budget and keeps costUsd null until priced", () => {
     const state = foldEvents([
-      { event: "budget", seq: 1, ts: "t", input_tokens: 100, output_tokens: 50 },
+      {
+        event: "budget",
+        seq: 1,
+        ts: "t",
+        input_tokens: 100,
+        output_tokens: 50,
+      },
     ]);
     expect(state.budget.costUsd).toBeNull(); // unpriced ≠ $0
-    reduceRun(state, { event: "budget", seq: 2, ts: "t", input_tokens: 10, output_tokens: 5, cost_usd: 0.25 });
+    reduceRun(state, {
+      event: "budget",
+      seq: 2,
+      ts: "t",
+      input_tokens: 10,
+      output_tokens: 5,
+      cost_usd: 0.25,
+    });
     expect(state.budget.inputTokens).toBe(110);
     expect(state.budget.costUsd).toBe(0.25);
   });
@@ -79,25 +123,50 @@ describe("reduceRun edge cases", () => {
     expect(auth.status).toBe("needs-auth");
     expect(auth.authRequired[0].server).toBe("linear");
 
-    const failed = foldEvents([{ event: "run.ended", seq: 1, ts: "t", status: "failed", reason: "budget exceeded", dur_ms: 5 }]);
+    const failed = foldEvents([
+      {
+        event: "run.ended",
+        seq: 1,
+        ts: "t",
+        status: "failed",
+        reason: "budget exceeded",
+        dur_ms: 5,
+      },
+    ]);
     expect(failed.status).toBe("failed");
     expect(failed.reason).toBe("budget exceeded");
   });
 
   it("a resume segment's run.started reopens the run without duplicating phases", () => {
     const state = foldEvents([
-      { event: "run.started", seq: 0, ts: "t", workflow: "w", run_id: "r", phases: ["A"] },
+      {
+        event: "run.started",
+        seq: 0,
+        ts: "t",
+        workflow: "w",
+        run_id: "r",
+        phases: ["A"],
+      },
       { event: "phase.started", seq: 1, ts: "t", phase: "A" },
       { event: "run.ended", seq: 2, ts: "t", status: "failed", dur_ms: 1 },
       // resume segment starts over at seq 0 with the same declared phases
-      { event: "run.started", seq: 0, ts: "t2", workflow: "w", run_id: "r", phases: ["A"] },
+      {
+        event: "run.started",
+        seq: 0,
+        ts: "t2",
+        workflow: "w",
+        run_id: "r",
+        phases: ["A"],
+      },
     ]);
     expect(state.status).toBe("live");
     expect(state.phases).toHaveLength(1);
   });
 
   it("skips unknown (future) event types", () => {
-    const state = foldEvents([{ event: "totally.new", seq: 0, ts: "t" } as never]);
+    const state = foldEvents([
+      { event: "totally.new", seq: 0, ts: "t" } as never,
+    ]);
     expect(state.lastSeq).toBe(0);
   });
 });

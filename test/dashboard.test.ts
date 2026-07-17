@@ -27,10 +27,24 @@ function writeRun(id: string, events: object[]): void {
 describe("listRuns", () => {
   it("lists run dirs newest-first and marks liveness by absent run.ended", () => {
     writeRun("finished", [
-      { event: "run.started", seq: 0, ts: "t", workflow: "a", run_id: "finished" },
+      {
+        event: "run.started",
+        seq: 0,
+        ts: "t",
+        workflow: "a",
+        run_id: "finished",
+      },
       { event: "run.ended", seq: 1, ts: "t", status: "success", dur_ms: 5 },
     ]);
-    writeRun("running", [{ event: "run.started", seq: 0, ts: "t", workflow: "b", run_id: "running" }]);
+    writeRun("running", [
+      {
+        event: "run.started",
+        seq: 0,
+        ts: "t",
+        workflow: "b",
+        run_id: "running",
+      },
+    ]);
     mkdirSync(join(root, "not-a-run")); // no journal → skipped
 
     const runs = listRuns(root);
@@ -47,11 +61,37 @@ describe("listRuns", () => {
 describe("run rendering", () => {
   it("summarizes a live run with phases and agents", () => {
     const state = foldEvents([
-      { event: "run.started", seq: 0, ts: "t", workflow: "content", run_id: "r", phases: ["Write", "Verify"] },
+      {
+        event: "run.started",
+        seq: 0,
+        ts: "t",
+        workflow: "content",
+        run_id: "r",
+        phases: ["Write", "Verify"],
+      },
       { event: "phase.started", seq: 1, ts: "t", phase: "Write" },
-      { event: "agent.started", seq: 2, ts: "t", agent_id: "writer_1", agent_name: "writer" },
-      { event: "agent.tool_call", seq: 3, ts: "t", agent_id: "writer_1", tool_name: "file/write" },
-      { event: "budget", seq: 4, ts: "t", input_tokens: 1000, output_tokens: 500, cost_usd: 0.12 },
+      {
+        event: "agent.started",
+        seq: 2,
+        ts: "t",
+        agent_id: "writer_1",
+        agent_name: "writer",
+      },
+      {
+        event: "agent.tool_call",
+        seq: 3,
+        ts: "t",
+        agent_id: "writer_1",
+        tool_name: "file/write",
+      },
+      {
+        event: "budget",
+        seq: 4,
+        ts: "t",
+        input_tokens: 1000,
+        output_tokens: 500,
+        cost_usd: 0.12,
+      },
     ]);
     const summary = formatRunSummary(state);
     expect(summary).toContain("▶ content");

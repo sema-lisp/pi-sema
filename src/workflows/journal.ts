@@ -1,4 +1,12 @@
-import { openSync, readSync, closeSync, statSync, readdirSync, watch, type FSWatcher } from "node:fs";
+import {
+  openSync,
+  readSync,
+  closeSync,
+  statSync,
+  readdirSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
 import { join } from "node:path";
 import type { JournalEvent } from "./model.js";
 
@@ -87,7 +95,9 @@ export class JournalTailer {
       .filter((m): m is RegExpExecArray => m !== null)
       .sort((a, b) => Number(a[1]) - Number(b[1]))
       .map((m) => m[0]);
-    const ordered = names.includes("events.jsonl") ? ["events.jsonl", ...resumes] : resumes;
+    const ordered = names.includes("events.jsonl")
+      ? ["events.jsonl", ...resumes]
+      : resumes;
     return ordered.map((n) => join(this.runDir, n));
   }
 
@@ -123,7 +133,8 @@ export class JournalTailer {
       const buffer = Buffer.alloc(length);
       const read = readSync(fd, buffer, 0, length, offset);
       this.offsets.set(file, offset + read);
-      const text = (this.partial.get(file) ?? "") + buffer.toString("utf-8", 0, read);
+      const text =
+        (this.partial.get(file) ?? "") + buffer.toString("utf-8", 0, read);
       const lines = text.split("\n");
       this.partial.set(file, lines.pop() ?? ""); // keep incomplete tail for the next drain
       for (const line of lines) {
@@ -131,7 +142,8 @@ export class JournalTailer {
         if (!trimmed) continue;
         try {
           const parsed = JSON.parse(trimmed);
-          if (parsed && typeof parsed.event === "string") into.push(parsed as JournalEvent);
+          if (parsed && typeof parsed.event === "string")
+            into.push(parsed as JournalEvent);
         } catch {
           // malformed line (should not happen given the flush contract) — skip
         }

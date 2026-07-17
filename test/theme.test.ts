@@ -39,7 +39,10 @@ function requiredTokens(): string[] {
 }
 
 /** Resolve a raw value one hop through `vars`; returns the concrete leaf value. */
-function resolve(value: string | number, vars: Record<string, string | number>): string | number {
+function resolve(
+  value: string | number,
+  vars: Record<string, string | number>,
+): string | number {
   if (typeof value === "number") return value;
   if (value === "") return value;
   if (HEX.test(value)) return value;
@@ -48,7 +51,8 @@ function resolve(value: string | number, vars: Record<string, string | number>):
 }
 
 function isConcrete(value: string | number): boolean {
-  if (typeof value === "number") return Number.isInteger(value) && value >= 0 && value <= 255;
+  if (typeof value === "number")
+    return Number.isInteger(value) && value >= 0 && value <= 255;
   return value === "" || HEX.test(value);
 }
 
@@ -80,7 +84,9 @@ describe("bundled Sema themes", () => {
         // theme.js, defaulted to thinkingXhigh when absent) are legal.
         const schema = readJson(SCHEMA);
         const required: string[] = schema.properties.colors.required;
-        const allowed = new Set(Object.keys(schema.properties.colors.properties));
+        const allowed = new Set(
+          Object.keys(schema.properties.colors.properties),
+        );
         const actual = Object.keys(theme.colors);
         expect(required.filter((k) => !actual.includes(k))).toEqual([]);
         expect(actual.filter((k) => !allowed.has(k))).toEqual([]);
@@ -95,13 +101,18 @@ describe("bundled Sema themes", () => {
       it("every color token resolves to a concrete value", () => {
         for (const [token, value] of Object.entries(theme.colors)) {
           const resolved = resolve(value, vars);
-          expect(isConcrete(resolved), `${token}=${JSON.stringify(value)} -> ${JSON.stringify(resolved)}`).toBe(true);
+          expect(
+            isConcrete(resolved),
+            `${token}=${JSON.stringify(value)} -> ${JSON.stringify(resolved)}`,
+          ).toBe(true);
         }
       });
 
       it("export section, if present, only uses concrete values", () => {
         for (const [token, value] of Object.entries(theme.export ?? {})) {
-          expect(isConcrete(resolve(value, vars)), `export.${token}`).toBe(true);
+          expect(isConcrete(resolve(value, vars)), `export.${token}`).toBe(
+            true,
+          );
         }
       });
     });

@@ -21,12 +21,18 @@ export interface CheckResult {
  * IMPORTANT: under --strict, warnings alone give a non-zero exit — so we gate
  * on the parsed `errors` count, never the exit code.
  */
-export async function workflowCheck(file: string, opts: { cwd?: string; signal?: AbortSignal } = {}): Promise<CheckResult> {
-  const result = await spawnSema(["workflow", "check", file, "--strict", "--json"], {
-    timeoutMs: 15_000,
-    cwd: opts.cwd,
-    signal: opts.signal,
-  });
+export async function workflowCheck(
+  file: string,
+  opts: { cwd?: string; signal?: AbortSignal } = {},
+): Promise<CheckResult> {
+  const result = await spawnSema(
+    ["workflow", "check", file, "--strict", "--json"],
+    {
+      timeoutMs: 15_000,
+      cwd: opts.cwd,
+      signal: opts.signal,
+    },
+  );
 
   let parsed: { diagnostics?: WorkflowDiagnostic[] } | null = null;
   try {
@@ -56,7 +62,10 @@ export async function workflowCheck(file: string, opts: { cwd?: string; signal?:
 export function formatDiagnostics(diags: WorkflowDiagnostic[]): string {
   return diags
     .map((d) => {
-      const loc = d.line != null ? ` (line ${d.line}${d.col != null ? `:${d.col}` : ""})` : "";
+      const loc =
+        d.line != null
+          ? ` (line ${d.line}${d.col != null ? `:${d.col}` : ""})`
+          : "";
       const hint = d.hint ? `\n  hint: ${d.hint}` : "";
       return `[${d.code}] ${d.message}${loc}${hint}`;
     })

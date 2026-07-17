@@ -37,11 +37,20 @@ describe("sanitizeName", () => {
 describe("LibraryStore", () => {
   it("saves and lists a project tool", () => {
     const store = new LibraryStore(cwd);
-    const path = store.save("project", "tools", "line-count", '(deftool line-count {} (lambda () 1))');
+    const path = store.save(
+      "project",
+      "tools",
+      "line-count",
+      "(deftool line-count {} (lambda () 1))",
+    );
     expect(path).toBe(join(cwd, ".pi", "pi-sema", "tools", "line-count.sema"));
     const entries = store.list("tools");
     expect(entries).toHaveLength(1);
-    expect(entries[0]).toMatchObject({ name: "line-count", tier: "project", kind: "tools" });
+    expect(entries[0]).toMatchObject({
+      name: "line-count",
+      tier: "project",
+      kind: "tools",
+    });
   });
 
   it("project tier shadows global on name collision", () => {
@@ -61,14 +70,24 @@ describe("LibraryStore", () => {
 
   it("keeps kinds separate — a workflow never lists as a tool", () => {
     const store = new LibraryStore(cwd);
-    store.save("project", "workflows", "research", "(defworkflow research ...)");
+    store.save(
+      "project",
+      "workflows",
+      "research",
+      "(defworkflow research ...)",
+    );
     expect(store.list("tools")).toHaveLength(0);
     expect(store.list("workflows")).toHaveLength(1);
   });
 
   it("resolves by name and by literal path", () => {
     const store = new LibraryStore(cwd);
-    const path = store.save("project", "workflows", "wf", "(defworkflow wf ...)");
+    const path = store.save(
+      "project",
+      "workflows",
+      "wf",
+      "(defworkflow wf ...)",
+    );
     expect(store.resolve("workflows", "wf")!.path).toBe(path);
     expect(store.resolve("workflows", path)!.path).toBe(path);
     expect(store.resolve("workflows", "missing")).toBeNull();

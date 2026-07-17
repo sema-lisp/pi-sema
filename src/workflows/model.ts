@@ -139,18 +139,27 @@ export function reduceRun(state: RunState, ev: JournalEvent): RunState {
       state.budget.inputTokens += num(ev.input_tokens) ?? 0;
       state.budget.outputTokens += num(ev.output_tokens) ?? 0;
       const cost = num(ev.cost_usd);
-      if (cost != null) state.budget.costUsd = (state.budget.costUsd ?? 0) + cost;
+      if (cost != null)
+        state.budget.costUsd = (state.budget.costUsd ?? 0) + cost;
       const limit = num(ev.budget_limit);
       if (limit != null) state.budget.limit = limit;
       break;
     }
     case "auth.required": {
-      state.authRequired.push({ server: str(ev.server), detail: str(ev.reason) });
+      state.authRequired.push({
+        server: str(ev.server),
+        detail: str(ev.reason),
+      });
       break;
     }
     case "run.ended": {
       const status = str(ev.status);
-      state.status = status === "success" ? "success" : status === "needs-auth" ? "needs-auth" : "failed";
+      state.status =
+        status === "success"
+          ? "success"
+          : status === "needs-auth"
+            ? "needs-auth"
+            : "failed";
       state.reason = str(ev.reason);
       state.endedTs = ev.ts;
       state.durMs = num(ev.dur_ms);
@@ -162,15 +171,22 @@ export function reduceRun(state: RunState, ev: JournalEvent): RunState {
   return state;
 }
 
-export function foldEvents(events: JournalEvent[], state = newRunState()): RunState {
+export function foldEvents(
+  events: JournalEvent[],
+  state = newRunState(),
+): RunState {
   for (const ev of events) reduceRun(state, ev);
   return state;
 }
 
 /** Most recently started phase still marked running, else last started. */
 function currentPhase(state: RunState): PhaseState | undefined {
-  const running = [...state.phases].reverse().find((p) => p.status === "running");
-  return running ?? [...state.phases].reverse().find((p) => p.seq !== undefined);
+  const running = [...state.phases]
+    .reverse()
+    .find((p) => p.status === "running");
+  return (
+    running ?? [...state.phases].reverse().find((p) => p.seq !== undefined)
+  );
 }
 
 function str(v: unknown): string | undefined {

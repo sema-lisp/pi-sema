@@ -42,18 +42,29 @@ export const DEFAULT_CONFIG: PiSemaConfig = {
   ui: { dashboardShortcut: "ctrl+alt+s" },
 };
 
-type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
+type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
 
-export function mergeConfig(base: PiSemaConfig, ...overlays: (DeepPartial<PiSemaConfig> | null)[]): PiSemaConfig {
+export function mergeConfig(
+  base: PiSemaConfig,
+  ...overlays: (DeepPartial<PiSemaConfig> | null)[]
+): PiSemaConfig {
   const result: PiSemaConfig = structuredClone(base);
   for (const overlay of overlays) {
     if (!overlay) continue;
-    deepMerge(result as unknown as Record<string, unknown>, overlay as Record<string, unknown>);
+    deepMerge(
+      result as unknown as Record<string, unknown>,
+      overlay as Record<string, unknown>,
+    );
   }
   return result;
 }
 
-function deepMerge(target: Record<string, unknown>, source: Record<string, unknown>): void {
+function deepMerge(
+  target: Record<string, unknown>,
+  source: Record<string, unknown>,
+): void {
   for (const [key, value] of Object.entries(source)) {
     if (value === undefined) continue;
     const existing = target[key];
@@ -65,14 +76,20 @@ function deepMerge(target: Record<string, unknown>, source: Record<string, unkno
       typeof existing === "object" &&
       !Array.isArray(existing)
     ) {
-      deepMerge(existing as Record<string, unknown>, value as Record<string, unknown>);
+      deepMerge(
+        existing as Record<string, unknown>,
+        value as Record<string, unknown>,
+      );
     } else {
       target[key] = value;
     }
   }
 }
 
-function readConfigFile(path: string, warn?: (msg: string) => void): DeepPartial<PiSemaConfig> | null {
+function readConfigFile(
+  path: string,
+  warn?: (msg: string) => void,
+): DeepPartial<PiSemaConfig> | null {
   let raw: string;
   try {
     raw = readFileSync(path, "utf-8");
@@ -82,7 +99,9 @@ function readConfigFile(path: string, warn?: (msg: string) => void): DeepPartial
   try {
     return JSON.parse(raw) as DeepPartial<PiSemaConfig>;
   } catch (err) {
-    warn?.(`pi-sema: ignoring malformed config at ${path}: ${err instanceof Error ? err.message : String(err)}`);
+    warn?.(
+      `pi-sema: ignoring malformed config at ${path}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
 }
@@ -93,11 +112,13 @@ export const FLAG_BUDGET = "sema-budget";
 
 export function registerConfigFlags(pi: ExtensionAPI): void {
   pi.registerFlag(FLAG_SANDBOX, {
-    description: "Sema sandbox for mcp + workflow runs: all | strict | comma caps (e.g. no-fs-write,no-shell)",
+    description:
+      "Sema sandbox for mcp + workflow runs: all | strict | comma caps (e.g. no-fs-write,no-shell)",
     type: "string",
   });
   pi.registerFlag(FLAG_EXCLUDE, {
-    description: "Comma-separated sema MCP tools to exclude (globs ok, e.g. notebook/*)",
+    description:
+      "Comma-separated sema MCP tools to exclude (globs ok, e.g. notebook/*)",
     type: "string",
   });
   pi.registerFlag(FLAG_BUDGET, {
@@ -107,9 +128,16 @@ export function registerConfigFlags(pi: ExtensionAPI): void {
 }
 
 /** Layering: defaults ← global config.json ← project config.json ← CLI flags. Never throws. */
-export function loadConfig(cwd: string, pi?: ExtensionAPI, warn?: (msg: string) => void): PiSemaConfig {
+export function loadConfig(
+  cwd: string,
+  pi?: ExtensionAPI,
+  warn?: (msg: string) => void,
+): PiSemaConfig {
   const globalFile = readConfigFile(join(globalRoot(), "config.json"), warn);
-  const projectFile = readConfigFile(join(projectRoot(cwd), "config.json"), warn);
+  const projectFile = readConfigFile(
+    join(projectRoot(cwd), "config.json"),
+    warn,
+  );
 
   const flagOverlay: DeepPartial<PiSemaConfig> = {};
   if (pi) {
@@ -119,7 +147,10 @@ export function loadConfig(cwd: string, pi?: ExtensionAPI, warn?: (msg: string) 
     }
     const exclude = pi.getFlag(FLAG_EXCLUDE);
     if (typeof exclude === "string" && exclude) {
-      flagOverlay.excludeTools = exclude.split(",").map((s) => s.trim()).filter(Boolean);
+      flagOverlay.excludeTools = exclude
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
     const budget = pi.getFlag(FLAG_BUDGET);
     if (typeof budget === "string" && budget && !Number.isNaN(Number(budget))) {

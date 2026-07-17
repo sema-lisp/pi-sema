@@ -5,18 +5,28 @@ import { verifyToolSource } from "../src/forge/probe.js";
 
 describe("extractDeftoolName", () => {
   it("extracts the name from a single deftool", () => {
-    expect(extractDeftoolName('(deftool line-count "d" {:p {:type :string}} (lambda (p) p))')).toBe("line-count");
+    expect(
+      extractDeftoolName(
+        '(deftool line-count "d" {:p {:type :string}} (lambda (p) p))',
+      ),
+    ).toBe("line-count");
   });
 
   it("allows helper defines before the deftool", () => {
-    expect(extractDeftoolName('(define helper (lambda (x) x))\n(deftool my-tool "d" {} (lambda () (helper 1)))')).toBe(
-      "my-tool",
-    );
+    expect(
+      extractDeftoolName(
+        '(define helper (lambda (x) x))\n(deftool my-tool "d" {} (lambda () (helper 1)))',
+      ),
+    ).toBe("my-tool");
   });
 
   it("rejects zero or multiple deftools", () => {
     expect(extractDeftoolName("(define x 1)")).toBeNull();
-    expect(extractDeftoolName('(deftool a "d" {} (lambda () 1))\n(deftool b "d" {} (lambda () 2))')).toBeNull();
+    expect(
+      extractDeftoolName(
+        '(deftool a "d" {} (lambda () 1))\n(deftool b "d" {} (lambda () 2))',
+      ),
+    ).toBeNull();
   });
 });
 
