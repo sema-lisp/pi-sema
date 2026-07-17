@@ -1,0 +1,4 @@
+# Only bun's builtin test runner reads this section. It half-implements the
+# vitest API, so `bun test` is guarded off; `bun run test` (vitest) is the way.
+[test]
+preload = ["./test/bun-guard.ts"]
