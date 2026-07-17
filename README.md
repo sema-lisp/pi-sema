@@ -1,11 +1,18 @@
-# pi-sema — a self-extending Sema toolkit for Pi
+<div align="center">
 
-**[Sema](https://sema-lang.com) support for the [Pi coding agent](https://pi.dev) — and a
-self-extension loop: the agent forges its own persistent Sema tools mid-session.**
+<img src="https://sema-lang.com/logo.svg" alt="Sema" height="64">
 
-[![CI](https://github.com/sema-lisp/pi-sema/actions/workflows/ci.yml/badge.svg)](https://github.com/sema-lisp/pi-sema/actions)
+# Sema for Pi
+
+**[Sema](https://sema-lang.com) support for the [Pi coding agent](https://pi.dev)** — and a
+self-extension loop: the agent forges its own persistent Sema tools mid-session.
+
+[![CI](https://img.shields.io/github/actions/workflow/status/sema-lisp/pi-sema/ci.yml?branch=main&label=CI&logo=github)](https://github.com/sema-lisp/pi-sema/actions)
 [![npm](https://img.shields.io/npm/v/@sema-lang/pi-sema)](https://www.npmjs.com/package/@sema-lang/pi-sema)
 [![License](https://img.shields.io/github/license/sema-lisp/pi-sema?color=c8a855)](LICENSE)
+[![Website](https://img.shields.io/badge/website-sema--lang.com-c8a855)](https://sema-lang.com)
+
+</div>
 
 Pi has no built-in MCP client and no sub-agents — pi-sema bridges Sema's MCP server into
 native Pi tools and layers three things on top:
@@ -99,21 +106,31 @@ list (`"no-shell,no-fs-write"`) requires a sema build whose `sema mcp` accepts
 ## Development
 
 ```bash
-npm install
-npm run check   # typecheck
-npm test        # vitest — live sema integration tests auto-skip without the binary
-npm run build
+jake build      # incremental TypeScript build (or: npm run build)
+jake install    # build + `pi install .` — use the local version in pi
+jake dev        # build, install, then launch pi right here
+jake test       # vitest — live sema integration tests auto-skip without the binary
+jake typecheck  # tsc --noEmit
 ```
+
+From the [workspace](https://github.com/sema-lisp/workspace) root the same recipes are
+namespaced: `jake pi.build`, `jake pi.dev`, ….
+
+> **Note:** `bun test` is not supported (bun's vitest shim is incomplete) — a guard
+> fails fast with instructions. Use `bun run test` or `npm test`.
 
 `docs/research/` holds the verified research this design is built on;
 `docs/manual-test-checklist.md` covers the TUI-only surface.
 
 ## Links
 
-- [Sema Website](https://sema-lang.com) · [Docs](https://sema-lang.com/docs) · [Playground](https://sema.run)
+- [Website](https://sema-lang.com)
+- [Playground](https://sema.run)
+- [Documentation](https://sema-lang.com/docs/)
 - [Sema MCP server](https://sema-lang.com/docs/mcp) · [Workflows](https://sema-lang.com/docs/llm/workflows)
 - [Pi extension docs](https://pi.dev/docs/latest/extensions)
+- [Repository](https://github.com/sema-lisp/pi-sema)
 
 ## License
 
-MIT © [Helge Sverre](https://github.com/HelgeSverre)
+[MIT](LICENSE) © [Helge Sverre](https://github.com/HelgeSverre)

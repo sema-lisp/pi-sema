@@ -3,10 +3,16 @@
   "version": "0.2.0",
   "description": "Self-extending Sema toolkit for the Pi coding agent — MCP bridge, tool forging (the agent builds its own tools), and journaled workflows with live TUI status.",
   "license": "MIT",
-  "author": "Helge Sverre",
+  "author": {
+    "name": "Helge Sverre",
+    "email": "helge.sverre@gmail.com"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/sema-lisp/pi-sema.git"
+  },
+  "bugs": {
+    "url": "https://github.com/sema-lisp/pi-sema/issues"
   },
   "homepage": "https://sema-lang.com",
   "type": "module",
@@ -40,11 +46,14 @@
     ]
   },
   "keywords": [
-    "pi",
-    "pi-extension",
-    "pi-package",
     "sema",
     "lisp",
-    "llm"
+    "llm",
+    "scheme",
+    "s-expression",
+    "ai",
+    "pi",
+    "pi-extension",
+    "pi-package"
   ]
 }
