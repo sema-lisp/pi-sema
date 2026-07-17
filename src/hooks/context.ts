@@ -53,9 +53,9 @@ Sema is a Scheme-like Lisp where LLM primitives are first-class.
 
 export function registerContextHooks(pi: ExtensionAPI): void {
   pi.on("before_agent_start", async (event, ctx) => {
-    if (!hasSemaFiles()) return;
-    const ver = semaVersion();
-    const header = `\nSema ${ver || "unknown"} is available in this project. Use sema-related tools for any Sema (.sema) code tasks.`;
+    if (!hasSemaFiles(ctx.cwd)) return;
+    const ver = await semaVersion();
+    const header = `\nSema ${ver || "unknown"} is available in this project. Use the sema_* tools for any Sema (.sema) code tasks.`;
     return {
       systemPrompt: event.systemPrompt + header + SEMA_KNOWLEDGE,
     };

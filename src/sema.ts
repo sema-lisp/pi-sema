@@ -1,98 +1,128 @@
-import { execSync, exec } from "node:child_process";
-import { existsSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { readdirSync } from "node:fs";
+import { join } from "node:path";
 
-export interface SemaResult {
+export interface SpawnSemaOptions {
+  /** Text piped to stdin (stream is closed after writing). */
+  stdin?: string;
+  /**
+   * Hard timeout enforced by us. sema's own `--timeout` flag is a parsed
+   * no-op (main.rs binds `timeout: _timeout`), so this is load-bearing.
+   */
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  cwd?: string;
+  env?: Record<string, string>;
+}
+
+export interface SpawnSemaResult {
   stdout: string;
   stderr: string;
-  exitCode: number;
+  code: number | null;
+  /** True when we terminated the process (timeout or abort), not sema itself. */
+  killed: boolean;
 }
 
-function resolveBinary(): string {
-  return "sema";
-}
+const SEMA_BIN = "sema";
 
-export function isSemaInstalled(): boolean {
-  try {
-    execSync(`${resolveBinary()} --version`, { stdio: "pipe" });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-export function semaVersion(): string | null {
-  try {
-    return execSync(`${resolveBinary()} --version`, {
-      encoding: "utf-8",
-      stdio: "pipe",
-    }).trim();
-  } catch {
-    return null;
-  }
-}
-
-export function runSema(args: string[], timeoutMs = 30_000): SemaResult {
-  const cmd = `${resolveBinary()} ${args.map(a => quoteArg(a)).join(" ")}`;
-  try {
-    const stdout = execSync(cmd, {
-      encoding: "utf-8",
-      stdio: "pipe",
-      timeout: timeoutMs,
-      maxBuffer: 10 * 1024 * 1024,
-    });
-    return { stdout: stdout.trim(), stderr: "", exitCode: 0 };
-  } catch (err: any) {
-    if (err?.stdout && err?.stderr) {
-      return {
-        stdout: err.stdout.toString().trim(),
-        stderr: err.stderr.toString().trim(),
-        exitCode: err.status ?? 1,
-      };
-    }
-    if (err?.stderr) {
-      return { stdout: "", stderr: err.stderr.toString().trim(), exitCode: err.status ?? 1 };
-    }
-    return { stdout: "", stderr: err?.message ?? String(err), exitCode: err?.status ?? 1 };
-  }
-}
-
-export async function runSemaAsync(args: string[], timeoutMs = 30_000): Promise<SemaResult> {
-  const bin = resolveBinary();
+/** Run `sema <args>` to completion with caller-enforced timeout and abort. */
+export function spawnSema(args: string[], opts: SpawnSemaOptions = {}): Promise<SpawnSemaResult> {
   return new Promise((resolve) => {
-    const child = exec(`${bin} ${args.map(a => quoteArg(a)).join(" ")}`, {
-      encoding: "utf-8",
-      timeout: timeoutMs,
-      maxBuffer: 10 * 1024 * 1024,
-    }, (error, stdout, stderr) => {
-      if (error && !stdout) {
-        resolve({ stdout: stdout?.trim() ?? "", stderr: stderr?.trim() ?? error.message, exitCode: error.code ?? 1 });
-      } else {
-        resolve({ stdout: stdout?.trim() ?? "", stderr: stderr?.trim() ?? "", exitCode: 0 });
-      }
+    const child = spawn(SEMA_BIN, args, {
+      cwd: opts.cwd,
+      env: opts.env ? { ...process.env, ...opts.env } : process.env,
+      stdio: ["pipe", "pipe", "pipe"],
     });
-    if (timeoutMs > 0) {
+
+    let stdout = "";
+    let stderr = "";
+    let killed = false;
+    let settled = false;
+
+    const finish = (code: number | null) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      resolve({ stdout, stderr, code, killed });
+    };
+
+    const kill = () => {
+      killed = true;
+      child.kill("SIGTERM");
+      // Escalate if SIGTERM is ignored.
       setTimeout(() => {
-        child.kill();
-        resolve({ stdout: "", stderr: "Timed out", exitCode: 124 });
-      }, timeoutMs);
+        if (!settled) child.kill("SIGKILL");
+      }, 2000).unref();
+    };
+
+    const timer = opts.timeoutMs ? setTimeout(kill, opts.timeoutMs) : undefined;
+    timer?.unref();
+    const onAbort = () => kill();
+    opts.signal?.addEventListener("abort", onAbort, { once: true });
+
+    const cleanup = () => {
+      if (timer) clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", onAbort);
+    };
+
+    child.stdout.on("data", (d: Buffer) => (stdout += d.toString("utf-8")));
+    child.stderr.on("data", (d: Buffer) => (stderr += d.toString("utf-8")));
+    child.on("error", (err) => {
+      stderr ||= err.message;
+      finish(null);
+    });
+    child.on("close", (code) => finish(code));
+
+    if (opts.stdin !== undefined) {
+      child.stdin.write(opts.stdin);
     }
+    child.stdin.end();
   });
 }
 
-export function hasSemaFiles(): boolean {
+let versionCache: string | null | undefined;
+
+/** `sema --version` output, cached for the process lifetime. Null = not installed. */
+export async function semaVersion(): Promise<string | null> {
+  if (versionCache !== undefined) return versionCache;
+  const result = await spawnSema(["--version"], { timeoutMs: 5000 });
+  versionCache = result.code === 0 ? result.stdout.trim() : null;
+  return versionCache;
+}
+
+export async function isSemaInstalled(): Promise<boolean> {
+  return (await semaVersion()) !== null;
+}
+
+const SKIP_DIRS = new Set(["node_modules", ".git", "target", "dist", ".worktrees", ".sema"]);
+
+const semaFilesCache = new Map<string, boolean>();
+
+/** Pure-Node bounded scan for .sema files (no fd/find dependency). Cached per cwd. */
+export function hasSemaFiles(cwd: string, maxDepth = 4): boolean {
+  const cached = semaFilesCache.get(cwd);
+  if (cached !== undefined) return cached;
+
+  const found = scanForSema(cwd, maxDepth);
+  semaFilesCache.set(cwd, found);
+  return found;
+}
+
+function scanForSema(dir: string, depth: number): boolean {
+  if (depth < 0) return false;
+  let entries;
   try {
-    const result = execSync("fd --type f --extension sema . 2>/dev/null || find . -name '*.sema' -type f 2>/dev/null | head -5", {
-      encoding: "utf-8",
-      stdio: "pipe",
-      timeout: 5_000,
-    });
-    return result.trim().length > 0;
+    entries = readdirSync(dir, { withFileTypes: true });
   } catch {
     return false;
   }
-}
-
-function quoteArg(arg: string): string {
-  if (/^[a-zA-Z0-9_./~-]+$/.test(arg)) return arg;
-  return `'${arg.replace(/'/g, "'\\''")}'`;
+  for (const entry of entries) {
+    if (entry.isFile() && entry.name.endsWith(".sema")) return true;
+  }
+  for (const entry of entries) {
+    if (entry.isDirectory() && !SKIP_DIRS.has(entry.name) && !entry.name.startsWith(".")) {
+      if (scanForSema(join(dir, entry.name), depth - 1)) return true;
+    }
+  }
+  return false;
 }

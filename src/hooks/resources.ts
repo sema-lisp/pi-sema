@@ -1,14 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
-import { hasSemaFiles } from "../sema.js";
 
-export function registerResourceHooks(pi: ExtensionAPI): void {
-  pi.on("resources_discover", async (event, ctx) => {
-    if (!hasSemaFiles()) return {};
-
-    return {
-      skillPaths: [],
-      promptPaths: [],
-      themePaths: [],
-    };
-  });
-}
+/**
+ * Placeholder for skill/prompt export (planned follow-up: generate SKILL.md +
+ * prompt templates from the tool/workflow library). Currently contributes nothing.
+ */
+export function registerResourceHooks(_pi: ExtensionAPI): void {}
