@@ -86,8 +86,16 @@ export function registerForgeTool(pi: ExtensionAPI, getRuntime: () => PiSemaRunt
         }
       }
 
-      // 3. Store to the chosen tier.
-      const tier: TierName = p.tier ?? cfg.library.defaultTier;
+      // 3. Store to the chosen tier — ask when the model didn't specify one.
+      let tier: TierName = p.tier ?? cfg.library.defaultTier;
+      if (!p.tier && ctx.hasUI) {
+        const choice = await ctx.ui.select(`Where should "${name}" live?`, [
+          `project (.pi/pi-sema — travels with this repo)${cfg.library.defaultTier === "project" ? " [default]" : ""}`,
+          `global (~/.pi/agent/pi-sema — available everywhere)${cfg.library.defaultTier === "global" ? " [default]" : ""}`,
+        ]);
+        if (choice?.startsWith("global")) tier = "global";
+        else if (choice?.startsWith("project")) tier = "project";
+      }
       const path = store.save(tier, "tools", name, `; ${p.description}\n${p.source.trim()}`);
 
       // 4. Inject into the live server env + 5. register with pi.
