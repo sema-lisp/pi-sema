@@ -19,7 +19,57 @@ export function sanitizeSchema(input: unknown): TSchema {
   if (schema.required !== undefined && !Array.isArray(schema.required)) {
     delete schema.required;
   }
+  schema.properties = Object.fromEntries(
+    Object.entries(schema.properties as Record<string, unknown>).map(([key, prop]) => [
+      key,
+      normalizeProperty(prop),
+    ]),
+  );
   return schema as unknown as TSchema;
+}
+
+/**
+ * Providers validate tool schemas against JSON Schema draft 2020-12 and reject
+ * the WHOLE request on any invalid type name — one bad forged tool would kill
+ * every turn. Sema's deftool type keywords leak through verbatim (`:list` →
+ * "list"), so map the common aliases and strip anything unrecognized
+ * (schema-less params are valid; wrong type names are not).
+ */
+const TYPE_ALIASES: Record<string, string> = {
+  string: "string",
+  str: "string",
+  number: "number",
+  float: "number",
+  double: "number",
+  integer: "integer",
+  int: "integer",
+  boolean: "boolean",
+  bool: "boolean",
+  array: "array",
+  list: "array",
+  vector: "array",
+  object: "object",
+  map: "object",
+  dict: "object",
+  null: "null",
+  nil: "null",
+};
+
+function normalizeProperty(prop: unknown): unknown {
+  if (!prop || typeof prop !== "object" || Array.isArray(prop)) return prop;
+  const out = { ...(prop as Record<string, unknown>) };
+  if (typeof out.type === "string") {
+    const mapped = TYPE_ALIASES[out.type.toLowerCase()];
+    if (mapped) out.type = mapped;
+    else delete out.type; // unknown type name → untyped param, still valid
+  }
+  if (out.items) out.items = normalizeProperty(out.items);
+  if (out.properties && typeof out.properties === "object") {
+    out.properties = Object.fromEntries(
+      Object.entries(out.properties as Record<string, unknown>).map(([k, v]) => [k, normalizeProperty(v)]),
+    );
+  }
+  return out;
 }
 
 /**

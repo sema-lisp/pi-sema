@@ -74,3 +74,44 @@ describe("expandExcludes", () => {
     expect(expandExcludes(["missing"], names)).toEqual([]);
   });
 });
+
+describe("sanitizeSchema draft-2020-12 type normalization", () => {
+  // A single invalid type name ("list") in any tool schema makes the provider
+  // 400 the ENTIRE request — this is the exact bug from the repo-annotations
+  // forge session.
+  it("maps sema type aliases to valid JSON Schema types", () => {
+    const schema = sanitizeSchema({
+      type: "object",
+      properties: {
+        tags: { type: "list", description: "annotation tags" },
+        count: { type: "int" },
+        deep: { type: "map", properties: { flag: { type: "bool" } } },
+        items: { type: "array", items: { type: "str" } },
+      },
+    }) as any;
+    expect(schema.properties.tags.type).toBe("array");
+    expect(schema.properties.count.type).toBe("integer");
+    expect(schema.properties.deep.type).toBe("object");
+    expect(schema.properties.deep.properties.flag.type).toBe("boolean");
+    expect(schema.properties.items.items.type).toBe("string");
+  });
+
+  it("strips unrecognized type names instead of passing them through", () => {
+    const schema = sanitizeSchema({
+      type: "object",
+      properties: { weird: { type: "keyword", description: "kept" } },
+    }) as any;
+    expect(schema.properties.weird.type).toBeUndefined();
+    expect(schema.properties.weird.description).toBe("kept");
+  });
+
+  it("leaves valid schemas untouched", () => {
+    const schema = sanitizeSchema({
+      type: "object",
+      properties: { name: { type: "string" }, n: { type: "number" } },
+      required: ["name"],
+    }) as any;
+    expect(schema.properties.name.type).toBe("string");
+    expect(schema.required).toEqual(["name"]);
+  });
+});
