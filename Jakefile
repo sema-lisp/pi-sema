@@ -62,6 +62,13 @@ task test args="":
     npm test -- {{args}}
 
 @group pi
+@desc "Format source files with Prettier"
+task format:
+    @needs npm
+    npm install
+    npm run format
+
+@group pi
 @desc "Publish @sema-lang/pi-sema to npm (prepublishOnly rebuilds)"
 task publish: [build]
     @confirm "Publish @sema-lang/pi-sema to npm?"

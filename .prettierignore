@@ -1,0 +1,5 @@
+# Generated session exports, not source
+pi-session-*.html
+
+# Jakefiles use jakefile.dev syntax, not JS/TS
+Jakefile

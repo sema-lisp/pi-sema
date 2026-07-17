@@ -31,6 +31,8 @@
     "check": "tsc --noEmit",
     "dev": "tsc --watch",
     "test": "vitest run",
+    "format": "prettier --write '**/*.{js,ts,md,html}'",
+    "format:check": "prettier --check '**/*.{js,ts,md,html}'",
     "prepublishOnly": "npm run build"
   },
   "dependencies": {
@@ -40,6 +42,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.10",
     "@types/node": "^26.1.1",
+    "prettier": "^3.9.5",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   },
