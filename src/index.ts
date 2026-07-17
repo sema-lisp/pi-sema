@@ -7,6 +7,7 @@ import { registerContextHooks } from "./hooks/context.js";
 import { registerResourceHooks } from "./hooks/resources.js";
 import { registerCommands } from "./commands.js";
 import { registerForgeTool } from "./forge/forge.js";
+import { registerWorkflowRunTool } from "./workflows/runner.js";
 
 export interface PiSemaRuntime {
   cfg: PiSemaConfig;
@@ -50,6 +51,7 @@ export default function (pi: ExtensionAPI) {
 
   registerCommands(pi, getRuntime);
   registerForgeTool(pi, getRuntime);
+  registerWorkflowRunTool(pi, getRuntime);
   registerContextHooks(pi);
   registerResourceHooks(pi);
 }
