@@ -1,0 +1,6 @@
+# Belt-and-braces: "files" in package.json already whitelists dist/ only.
+docs/
+test/
+src/
+scripts/
+.github/
