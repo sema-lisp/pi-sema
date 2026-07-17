@@ -1,4 +1,5 @@
 KEY FACTS:
+
 - Workflow runtime = crates/sema-workflow (leaf crate: context.rs, event.rs, journal.rs) + builtins in crates/sema-stdlib/src/workflow.rs + macros defworkflow/phase/step/checkpoint/parallel/pipeline in crates/sema-eval/src/prelude.rs:327-621; canonical doc website/docs/llm/workflows.md
 - Run dir is a FROZEN public contract: .sema/runs/<run-id>/{events.jsonl, events.resume-<n>.jsonl, memo/<content-key>.json, args.json, metadata.json, result.json} + cross-run index.db (sema-workflow/src/lib.rs:22-30, journal.rs:15-24)
 - Journal is flushed per event (one JSON line + newline, flush after every write; crash leaves valid JSONL prefix) — journal.rs:125-139 — so an external TUI can live-tail events.jsonl; the official viewer polls it every 1s (workflow_view/index.html init)
@@ -23,6 +24,7 @@ Repo: `/Users/helge/code/sema/sema` (Rust monorepo, version 1.30.0 per `Cargo.to
 A **journaled, resumable, budgeted agentic-workflow runtime**. The `defworkflow` form IS the run: evaluating it opens a journal, executes the body, and returns a discriminated-union `{:status …}` envelope (`crates/sema-workflow/src/lib.rs:1-12`).
 
 ### DSL (prelude macros, `crates/sema-eval/src/prelude.rs`)
+
 - `(defworkflow name "doc" meta-map body…)` (prelude.rs:327) → expands to `(workflow/run (symbol->string 'name) doc meta (lambda () body…))`. Meta keys: `:phases [strings]` (declared phase plan, shown up-front in dashboard), `:budget {:tokens N :usd M}` (spend caps), `:permissions "no-fs-write,no-network"|"strict"|"all"|"none"` (sandbox tightening, can only remove caps), `:args` (informational schema), `:mcp {alias {spec…}}` (declared MCP servers auth-resolved and connected BEFORE the body runs; aliases bound as live handles via `workflow/mcp-handle`).
 - `(phase "Label")` (prelude.rs:343) — a **marker, not a wrapper**; exactly 1 arg. Closes the prior phase, opens a new one; subsequent steps/checkpoints attribute to it. Returns nil.
 - `(step prompt {:name … :schema … :tools […] :agent A})` (prelude.rs:393) — the atomic journaled LLM leaf. Routing: `:agent` → run a configured `defagent` via `agent/run` (its own system prompt/tools/model; inline `:tools`/`:model` ignored, static checker warns W-STEP-AGENT-TOOLS/MODEL); `:tools` → real tool loop via `llm/chat`; `:schema` → typed extraction via `llm/extract` (hybrid: pure local json/decode+type check first, re-ask fallback only when re-asking can help; special sentinel `:schema :sema-form` → `read-many` over completion text, i.e. LLM-generated Sema code, paired with `workflow/run-form` macro prelude.rs:493 — self-rewriting workflows, tested in `workflow_selfrewrite_test.rs`); else plain `llm/complete`. Macro injects internal `:__prompt`/`:__schema-repr` keys for the resume content-key.
@@ -31,30 +33,33 @@ A **journaled, resumable, budgeted agentic-workflow runtime**. The `defworkflow`
 - No DAG: the body is **sequential ordinary Sema code**; concurrency exists only inside `parallel`/`pipeline` leaves. No per-step retry primitive in the workflow layer (a general `with-retry` macro exists at prelude.rs:637; retries as a managed workflow concern are explicitly deferred — see §4).
 
 ### Builtins (`crates/sema-stdlib/src/workflow.rs`, registered names)
+
 `workflow/run` (workflow.rs:211), `workflow/phase` (:438), `workflow/step` (:471), `workflow/tool-call` (:605), `workflow/checkpoint` (:639), `workflow/mcp-handle` (:692), `workflow/check` (:732, in-language checker returning a list of `{:severity :code :message :line :col :hint}` maps). `workflow/step` outside a run is transparent (just calls the thunk).
 
 ### Runtime crate (`crates/sema-workflow`)
+
 `WorkflowCtx` (context.rs:48) is a thread-local, RAII-guarded run scope holding: journal, monotonic `seq`, checkpoint/state bag, budget caps + sticky `over_budget` latch (`Cell<bool>`, checked at step ENTRY so `__fanout-tagged` can't swallow it; tripping forces `{:status :failed :reason "budget exceeded"}`), open-phase tracking, per-name agent_id counter (`<name>_<n>`), resume memos, args fingerprint, MCP handles. Env seams: `SEMA_WORKFLOW_RUN_ID`, `SEMA_WORKFLOW_RUN_DIR` (CLI `--run-dir`), `SEMA_WORKFLOW_FIXED_TS` (deterministic goldens), `SEMA_WORKFLOW_CODE_VERSION` (source hash set by CLI, main.rs ~1335).
 
 ### State persistence / resume
+
 Run directory (**FROZEN public contract**, journal.rs:15-24): `.sema/runs/<run-id>/{events.jsonl, events.resume-<n>.jsonl, memo/<content-key>.json, args.json, metadata.json, result.json}` plus a cross-run `index.db` (SQLite) at the runs root (`lib.rs:26-30`). `--resume <run-id>`: leaves whose content-key exists in `memo/` replay for free (no model call, no events, no budget charge — resume check precedes the budget latch, workflow.rs:483-513). Content keys = hash of (kind, code-version, args-fingerprint, phase, step-name, prompt, schema-repr) + an occurrence ordinal; editing source or `--args` auto-invalidates. Each resume writes a fresh `events.resume-N.jsonl` segment keeping frozen invariants (first line `run.started`, seq from 0); the viewer merges segments. Deleting one memo file re-runs just that leaf.
 
 ## 2. Observability — what an external harness (Pi TUI overlay) can consume
 
 **The primary integration surface is the frozen JSONL journal, flushed per event** (journal.rs:130-139: one JSON line + `\n`, `flush` after every write; "a crash mid-run leaves a valid JSONL prefix"). Tail `.sema/runs/<run-id>/events.jsonl` (plus `events.resume-*.jsonl`) for live status. Event vocabulary (`crates/sema-workflow/src/event.rs`, FROZEN, append-only Option/skippable fields only):
 
-| event | key fields |
-|---|---|
-| `run.started` | seq, ts (RFC3339 UTC), workflow, run_id, code_version?, args_json?, **phases[]** (full declared plan → render pending phases up front) |
-| `phase.started` / `phase.ended` | phase; ended adds status ("success"/"failed"), dur_ms |
-| `agent.started` | agent_id (e.g. `write-article_2`), agent_name (role label), model?, prompt? (capped) |
-| `agent.result` | agent_id, status ("ok"/"failed"), output (capped opaque string), dur_ms, model |
-| `agent.tool_call` | agent_id, tool_name, args_json (real args rendered, or "gated") |
-| `checkpoint` | phase_seq?, key, content_key, value_digest, value? (capped) |
-| `budget` | agent_id?, phase_seq?, input_tokens, output_tokens, cost_usd? (NULL=unpriced), budget_limit? |
-| `run.ended` | status ("success"/"failed"/"needs-auth"), reason?, dur_ms |
-| `memory` | phase_seq?, agent_id?, memory_id, namespace, op (append/remember/recall), key?, value_digest, count |
-| `auth.required` / `auth.granted` / `auth.failed` | server alias, scopes, tools, persist / expires_at, source (cached/refreshed/consented) / reason — never token material |
+| event                                            | key fields                                                                                                                             |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.started`                                    | seq, ts (RFC3339 UTC), workflow, run_id, code_version?, args_json?, **phases[]** (full declared plan → render pending phases up front) |
+| `phase.started` / `phase.ended`                  | phase; ended adds status ("success"/"failed"), dur_ms                                                                                  |
+| `agent.started`                                  | agent_id (e.g. `write-article_2`), agent_name (role label), model?, prompt? (capped)                                                   |
+| `agent.result`                                   | agent_id, status ("ok"/"failed"), output (capped opaque string), dur_ms, model                                                         |
+| `agent.tool_call`                                | agent_id, tool_name, args_json (real args rendered, or "gated")                                                                        |
+| `checkpoint`                                     | phase_seq?, key, content_key, value_digest, value? (capped)                                                                            |
+| `budget`                                         | agent_id?, phase_seq?, input_tokens, output_tokens, cost_usd? (NULL=unpriced), budget_limit?                                           |
+| `run.ended`                                      | status ("success"/"failed"/"needs-auth"), reason?, dur_ms                                                                              |
+| `memory`                                         | phase_seq?, agent_id?, memory_id, namespace, op (append/remember/recall), key?, value_digest, count                                    |
+| `auth.required` / `auth.granted` / `auth.failed` | server alias, scopes, tools, persist / expires_at, source (cached/refreshed/consented) / reason — never token material                 |
 
 Nesting model (what the viewer does, `workflow_view/index.html`): phases keyed by phase.started seq; agents/checkpoints/budget attribute via `phase_seq`; agent rows correlate started→result→budget by `agent_id`; an agent with no `agent.result` yet = running; run with no `run.ended` = live.
 

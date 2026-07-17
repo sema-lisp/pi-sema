@@ -9,6 +9,7 @@ Ship an on-brand Sema theme for the Pi coding agent as part of the `@sema-lang/p
 package, so `pi install npm:@sema-lang/pi-sema` delivers it and users can `/theme sema`.
 
 Two variants:
+
 - `sema` — dark, the brand's true home: brass (`#c8a855`) on warm near-black (`#131110`).
 - `sema-light` — parchment: dark brass ink on warm off-white, for light terminals and
   Pi's auto light/dark switching (`--theme "sema-light,sema"`).
@@ -24,6 +25,7 @@ highlighting theme (`sema/website/.vitepress/sema-code-theme.json`) that maps al
 Pi's 9 syntax tokens. We translate an existing identity rather than invent one.
 
 Brand palette:
+
 - Brass accent `#c8a855`, darker brass `#a08838`
 - Backgrounds (dark): `#131110` (deepest), `#181512` (alt/code), `#1c1916` (soft)
 - Text `#e9e3d6`, muted `#968c79`, dim `#6b6354`, divider `#221e19`, scrollbar `#3a342b`
@@ -52,21 +54,21 @@ including it fails validation. Values: `#RRGGBB`, a 256-color int, a `vars` refe
 
 Uses `vars` for the palette; `colors` reference them. Highlights:
 
-| Token(s) | Value |
-| --- | --- |
-| accent, borderAccent, toolTitle, mdHeading, mdListBullet, customMessageLabel, syntaxKeyword, syntaxOperator | brass `#c8a855` |
-| text | `#e9e3d6` |
-| muted / dim / toolOutput / mdQuote / toolDiffContext / thinkingText | `#968c79` / `#6b6354` |
-| border / borderMuted / mdCodeBlockBorder / mdHr | `#3a342b` / `#221e19` |
-| success / syntaxString / toolDiffAdded | green `#a8c47a` |
-| warning / syntaxNumber / bashMode / mdCode | amber `#d19a66` |
-| error / toolDiffRemoved | brick `#cc6a5a` |
-| syntaxType / syntaxFunction / mdLink | teal `#7aacb8` |
-| syntaxComment / syntaxPunctuation | `#6b6354` / `#6a6258` |
-| selectedBg / userMessageBg / customMessageBg / toolPendingBg | `#221e19` / `#181512` / `#1c1916` / `#181512` |
-| toolSuccessBg / toolErrorBg | tinted `#171a12` / `#201411` |
-| thinking off→xhigh | dim → muted → teal → brass → amber → brick |
-| export | pageBg `#131110`, cardBg `#181512`, infoBg `#1c1916` |
+| Token(s)                                                                                                    | Value                                                |
+| ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| accent, borderAccent, toolTitle, mdHeading, mdListBullet, customMessageLabel, syntaxKeyword, syntaxOperator | brass `#c8a855`                                      |
+| text                                                                                                        | `#e9e3d6`                                            |
+| muted / dim / toolOutput / mdQuote / toolDiffContext / thinkingText                                         | `#968c79` / `#6b6354`                                |
+| border / borderMuted / mdCodeBlockBorder / mdHr                                                             | `#3a342b` / `#221e19`                                |
+| success / syntaxString / toolDiffAdded                                                                      | green `#a8c47a`                                      |
+| warning / syntaxNumber / bashMode / mdCode                                                                  | amber `#d19a66`                                      |
+| error / toolDiffRemoved                                                                                     | brick `#cc6a5a`                                      |
+| syntaxType / syntaxFunction / mdLink                                                                        | teal `#7aacb8`                                       |
+| syntaxComment / syntaxPunctuation                                                                           | `#6b6354` / `#6a6258`                                |
+| selectedBg / userMessageBg / customMessageBg / toolPendingBg                                                | `#221e19` / `#181512` / `#1c1916` / `#181512`        |
+| toolSuccessBg / toolErrorBg                                                                                 | tinted `#171a12` / `#201411`                         |
+| thinking off→xhigh                                                                                          | dim → muted → teal → brass → amber → brick           |
+| export                                                                                                      | pageBg `#131110`, cardBg `#181512`, infoBg `#1c1916` |
 
 ## Light token mapping (`sema-light`)
 
@@ -79,4 +81,7 @@ string `#5a7d3a` / number `#a76a2e` / keyword `#3a7d8a`, light-tinted region bgs
 1. Load both files through Pi's own `loadThemeFromPath` (installed SDK) and assert no throw
    and every one of the 51 required tokens resolves — as a `test/theme.test.ts`.
 2. Manual: `/theme sema` and `/theme sema-light` live in Pi; tune from there.
+
+```
+
 ```

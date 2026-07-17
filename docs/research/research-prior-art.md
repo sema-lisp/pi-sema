@@ -1,4 +1,5 @@
 KEY FACTS:
+
 - Amp toolboxes: AMP_TOOLBOX env var (colon-separated dirs); Amp runs each executable with TOOLBOX_ACTION=describe (tool prints JSON {name, description, args:{arg:[type,desc]}} to stdout) then TOOLBOX_ACTION=execute with args as JSON on stdin; tools prefixed tb__ — https://ampcode.com/news/toolboxes
 - Amp self-authoring is human-directed: `amp tools make/show/use` + prompting Amp to edit .amp/tools/*; new tools register at startup, not live — https://ampcode.com/news/more-tools-for-the-agent
 - Claude Code skills: dirs with SKILL.md under ~/.claude/skills or .claude/skills; ~100 tokens/skill indexed at startup (name+description only), full body loaded on invocation; skill dirs are file-watched so agent-written skills activate mid-session — https://code.claude.com/docs/en/skills
@@ -19,23 +20,27 @@ KEY FACTS:
 ## 1. Claude Code — agent-authored capabilities (skills, agents, hooks, commands) + status UI
 
 ### Skills (SKILL.md) — the canonical "agent-authored capability" store
+
 - A skill = a directory containing `SKILL.md` (YAML frontmatter: `name`, `description`, optional `disable-model-invocation: true` for user-only side-effect commands, `user-invocable: false` for model-only knowledge) + optional scripts/templates/reference files. Docs: https://code.claude.com/docs/en/skills
 - **Storage tiers**: personal `~/.claude/skills/`, project `.claude/skills/` (discovered up the directory tree to repo root and in nested monorepo packages), enterprise, plugin. Name-collision precedence: enterprise → personal → project → bundled.
 - **Progressive disclosure**: at startup only name+description are indexed (~100 tokens/skill); the full body loads into context only on invocation, and stays for the session (not re-read).
-- **Live reload**: skill directories are file-watched — an agent (or user) writing a new SKILL.md under a watched directory makes it available *within the current session*, no restart. This is the key mechanism enabling a self-authoring loop: Claude can Write a SKILL.md and immediately have the capability. Only creating a brand-new top-level skills dir requires restart.
-- Slash command name comes from the *directory name* (`.claude/skills/deploy-staging/SKILL.md` → `/deploy-staging`), not frontmatter.
+- **Live reload**: skill directories are file-watched — an agent (or user) writing a new SKILL.md under a watched directory makes it available _within the current session_, no restart. This is the key mechanism enabling a self-authoring loop: Claude can Write a SKILL.md and immediately have the capability. Only creating a brand-new top-level skills dir requires restart.
+- Slash command name comes from the _directory name_ (`.claude/skills/deploy-staging/SKILL.md` → `/deploy-staging`), not frontmatter.
 - Anthropic's own meta-loop exists: the `skill-creator` skill (create/edit/eval skills) — i.e., a skill whose job is authoring skills, with the model as author and evals as verification.
 - "Validation" is soft: description-quality determines routing accuracy; best practice is <500-line SKILL.md, deterministic work pushed into bundled scripts. Guides: https://www.damiandemasi.com/blog/claude-code-skills-deep-dive, https://designrevision.com/blog/claude-code-skills
 
 ### /agents — "Generate with Claude" subagent creation
+
 - `/agents` opens a tabbed UI: **Running** tab (live subagents, open/stop) + **Library** tab (built-in/user/project/plugin agents; "Create new → scope → Generate with Claude" where Claude interviews you and writes the definition). Agents are markdown files with YAML frontmatter (`name`, `description` required; body = system prompt) at `.claude/agents/<name>.md` or `~/.claude/agents/<name>.md`. Resolution order: session > project > user > plugin. Sources: https://hidekazu-konishi.com/entry/claude_code_subagents_and_orchestration_guide.html, https://medium.com/@sathishkraju/claude-code-subagents-the-complete-guide-to-ai-agent-delegation-d0a9aba419d0
 - Notable asymmetry vs skills: agent files written directly to disk require a session restart, but agents created through the `/agents` UI take effect immediately — i.e., the sanctioned creation flow doubles as the hot-registration path.
 
 ### Hooks — deterministic validation layer for anything agent-authored
+
 - Configured in `.claude/settings.json` (project) / `~/.claude/settings.json` (user); matcher regex + command list. Protocol: hook script gets tool-call JSON on stdin; **exit 0 = proceed (normal permission flow still applies), exit 2 = block with stderr fed back to the model, exit 1 = non-blocking warning**. JSON output offers finer control: `hookSpecificOutput.permissionDecision`, `permissionDecisionReason`, `modifyInput` (rewrite tool input on the fly). Events: PreToolUse, PostToolUse, Stop, SubagentStop, etc. Docs: https://code.claude.com/docs/en/hooks-guide; guides: https://hidekazu-konishi.com/entry/claude_code_hooks_complete_guide.html, https://blakecrosley.com/blog/claude-code-hooks-tutorial
-- Stealable idea: hooks are the *deterministic gate* around a probabilistic agent — agent-authored tools can be wrapped in PreToolUse validation without trusting the model.
+- Stealable idea: hooks are the _deterministic gate_ around a probabilistic agent — agent-authored tools can be wrapped in PreToolUse validation without trusting the model.
 
 ### Background tasks + statusline UI
+
 - Ctrl+B backgrounds a running subagent or shell command; `/tasks` lists background processes with IDs; K kills. `/bg` moves a session into "agent view" (`claude agents`, v2.1.139+, research preview): one screen showing all background sessions — running / needs-input / done. Docs: https://code.claude.com/docs/en/agent-view; https://claudefa.st/blog/guide/agents/async-workflows
 - Statusline: `/statusline` generates `~/.claude/statusline.sh` referenced from settings.json; the script receives a JSON payload on stdin (model, context window, cost). Known gap: background-task count, PR context, and update notices are NOT in the JSON — they render as built-in overlays sharing the statusline row that custom scripts can't control (open issue: https://github.com/anthropics/claude-code/issues/33310).
 
@@ -55,6 +60,7 @@ Paper: https://arxiv.org/abs/2305.16291; code: https://github.com/minedojo/voyag
 Loop: **generate code (GPT-4) → execute in environment → collect 3 feedback channels (environment state, execution errors, a second GPT-4 call as self-verifier judging task completion) → refine up to 4 rounds → on success, store the program in the skill library → retrieve top-5 skills by embedding similarity over the natural-language description when a new task arrives.**
 
 Design lessons (with ablation evidence):
+
 - **Skills are stored as executable code, indexed by embeddings of their descriptions** — retrieval is fuzzy, execution is deterministic. Code as action space handles temporally-extended, compositional actions.
 - **Verification-before-storage is the load-bearing part**: removing self-verification dropped performance 73%; removing the automatic curriculum dropped discovered items 93%.
 - **Skills compound and prevent catastrophic forgetting**; the library is a plug-and-play asset (it boosted AutoGPT when bolted on).
@@ -64,12 +70,13 @@ Design lessons (with ablation evidence):
 ## 4. Emacs/Vim — the OG self-modifying environment
 
 Patterns worth stealing (canonical behavior, GNU Emacs manual/elisp docs; grounded in the gptel ecosystem below for the LLM angle):
+
 - **`eval-buffer` / `eval-last-sexp` / `M-:`**: code and configuration are the same language, evaluated live into the running image — no restart, no compile step. New commands exist the instant they're defined (`interactive` → immediately in `M-x`). This is the maximal version of Claude Code's skill-watching / Amp's startup registration.
 - **Self-describing introspection**: `describe-function` / `describe-variable` / `describe-key` (`C-h f/v/k`) — every command carries its own docstring and source link. Equivalent of a `describe` protocol built into the runtime; an LLM can read the environment's own documentation for the thing it just created.
 - **Advice (`advice-add`)**: wrap/modify existing commands without editing their source — non-destructive extension, composable and removable. Stealable as "agent patches a tool's behavior without rewriting it."
 - **`M-x` + `which-key`** (https://github.com/justbur/emacs-which-key, now bundled in Emacs 30): a flat, discoverable, fuzzy-searchable command namespace, plus incremental disclosure of available keybindings after a prefix — the UI pattern for "what can I do right now," directly analogous to progressive tool disclosure.
 - **Modern LLM+Emacs**: **gptel** (https://github.com/karthink/gptel) has `gptel-make-tool` — register an elisp function with `:name`, `:description`, `:args` (plists with `:name :type :description`), `:category`; the LLM calls it, gptel executes in the live Emacs session, result returned to the model. Ships no built-in tools; community collections (llm-tool-collection, ragmacs) include **Elisp evaluation and Emacs introspection tools** — with an eval tool, the LLM writes elisp that immediately becomes new interactive commands: the full Voyager loop inside one process. Confirmation gating: `gptel-confirm-tool-calls`. Internally an FSM (INIT/WAIT/TYPE/TOOL/DONE) runs the tool loop. Manual: https://gptel.org/manual.html; author's post: https://karthinks.com/software/tool-use-with-gptel-looking-for-testers/. gptel also consumes MCP via mcp.el (`gptel-integrations`).
-- Key lesson: Emacs makes self-extension safe-ish via *reversibility* (advice removal, `unload-feature`, everything is data) and *introspection*, not via sandboxing.
+- Key lesson: Emacs makes self-extension safe-ish via _reversibility_ (advice removal, `unload-feature`, everything is data) and _introspection_, not via sandboxing.
 
 ## 5. Other agents & MCP dynamic tools
 
@@ -83,17 +90,18 @@ Patterns worth stealing (canonical behavior, GNU Emacs manual/elisp docs; ground
 
 ## 6. TUI precedents for live workflow/pipeline status
 
-- **Claude Code**: Running-agents tab in `/agents`; `/tasks` list; agent view (`claude agents`) — a triage screen grouping sessions by *running / needs-input / done* (https://code.claude.com/docs/en/agent-view). Statusline is a user script fed JSON on stdin, but system overlays (background-task count) are outside its control (https://github.com/anthropics/claude-code/issues/33310).
+- **Claude Code**: Running-agents tab in `/agents`; `/tasks` list; agent view (`claude agents`) — a triage screen grouping sessions by _running / needs-input / done_ (https://code.claude.com/docs/en/agent-view). Statusline is a user script fed JSON on stdin, but system overlays (background-task count) are outside its control (https://github.com/anthropics/claude-code/issues/33310).
 - **opencode**: the instructive case because its gaps are documented as feature requests:
   - No native subagent view — proposal for a split-pane subagents panel (left: list w/ status + last tool; right: output preview; hjkl nav; `/subagents` command): https://github.com/anomalyco/opencode/issues/15223
   - Status-bar aggregate proposal `"{total} sub[{permission}⏳ {completed}✓]"` with auto-switch on permission/completion events: https://github.com/anomalyco/opencode/issues/15363
-  - The "feels frozen" failure mode: parent session shows only "N toolcalls" while a subagent blocks on user input — requested fix: surface *which* subagent blocks and allow replying without switching: https://github.com/anomalyco/opencode/issues/10802
+  - The "feels frozen" failure mode: parent session shows only "N toolcalls" while a subagent blocks on user input — requested fix: surface _which_ subagent blocks and allow replying without switching: https://github.com/anomalyco/opencode/issues/10802
   - Community plugins fill the gap: sub-agent-statusline sidebar (running/done/failed, elapsed, tokens, Alt+B focus): https://github.com/Joaquinvesapa/sub-agent-statusline; opencode-subagent-output prefixes streamed lines with `AgentName N:` + finish markers for headless runs: https://github.com/raisbecka/opencode-subagent-output; Ralph TUI parses JSONL to render a toggleable subagent tree panel: https://ralph-tui.com/docs/plugins/agents/opencode
   - Internals: LLM-written TodoInfo items (pending/in-progress/completed/cancelled) rendered as checkmarks/strikethrough; attention events (permission, question, error, `subagent_done`) drive sounds/notifications: https://cefboud.com/posts/coding-agents-internals-opencode-deepdive/, https://opencode.ai/docs/tui/
 - **Aider**: deliberately no subagent/pipeline UI — single-stream, git-integrated simplicity (https://renard-digital.fr/blog/en/ai-coding-terminal-comparison/).
 - **Tmux-fleet alternative**: pi-boss (subagents in visible tmux panes) and repomon (fleet/split/babysit-grid/focus zoom levels + needs-you triage): https://github.com/bradagi/awesome-cli-coding-agents
 
 ### Distilled stealable UI patterns
+
 1. **Footer aggregate counter** (running/blocked/done) in the statusline, cheap and always visible.
 2. **Tree/sidebar panel** per subagent: status glyph, last tool, elapsed, tokens; toggleable, keyboard-focusable.
 3. **Prefixed streamed logs** (`Agent N: line`) for non-interactive/pipeline mode.
@@ -102,6 +110,7 @@ Patterns worth stealing (canonical behavior, GNU Emacs manual/elisp docs; ground
 6. **Todo-list rendering** of model-authored plan items with status transitions is the proven minimal "workflow status" widget.
 
 ## Cross-cutting distillation for a self-extending agent
+
 1. **Describe/execute over exec-per-file is the cheapest tool protocol** (Amp: env var `TOOLBOX_ACTION`, JSON on stdout/stdin) — trivially agent-writable in any language.
 2. **Verify before registering** (Voyager's 73% ablation; Amp's `amp tools use` smoke test; skill-creator's evals). A tool enters the library only after passing execution.
 3. **Progressive disclosure**: index name+description only (~100 tokens each, Claude Code) or embedding-retrieve top-k (Voyager); avoid the 40-tool dump the seuros post blames on broken listChanged support.

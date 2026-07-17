@@ -1,7 +1,8 @@
 KEY FACTS:
+
 - Pi repo is github.com/badlogic/pi-mono (aliased to earendil-works/pi); npm package repository field = git+https://github.com/earendil-works/pi.git, directory packages/coding-agent (local package.json:89-92); researched version 0.79.10 (CHANGELOG.md, 2026-06-22)
 - Pi has NO native MCP: README states 'No MCP. Build CLI tools with READMEs (see Skills), or build an extension that adds MCP support' linking https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/; docs/usage.md:306 lists MCP, sub-agents, plan mode, to-dos as intentionally excluded
-- De-facto MCP bridge today: community npm package pi-mcp-adapter v2.11.0 by nicopreme (github.com/nicobailon/pi-mcp-adapter, ~129K downloads/mo, top of pi.dev/packages) — single ~200-token `mcp` proxy tool with search/invoke, lazy server lifecycle, stdio+StreamableHTTP/SSE, OAuth, reads .mcp.json//~/.config/mcp/mcp.json/~/.pi/agent/mcp.json/.pi/mcp.json, supports MCP sampling through Pi models and elicitation via Pi dialogs
+- De-facto MCP bridge today: community npm package pi-mcp-adapter v2.11.0 by nicopreme (github.com/nicobailon/pi-mcp-adapter, ~~129K downloads/mo, top of pi.dev/packages) — single ~~200-token `mcp` proxy tool with search/invoke, lazy server lifecycle, stdio+StreamableHTTP/SSE, OAuth, reads .mcp.json//~~/.config/mcp/mcp.json/~~/.pi/agent/mcp.json/.pi/mcp.json, supports MCP sampling through Pi models and elicitation via Pi dialogs
 - Extension UI API: ctx.ui.custom((tui,theme,keybindings,done)=>Component, {overlay:true, overlayOptions:{anchor,width:'50%',margin,row/col,visible(fn)}, onHandle}) for floating overlays; setWidget(key, lines|factory, {placement:'aboveEditor'|'belowEditor'}), setFooter/setHeader/setStatus/setTitle/setEditorComponent/setWorkingIndicator (docs/extensions.md:2270-2464, docs/tui.md:109-190)
 - Custom renderers: pi.registerMessageRenderer(customType, fn) + pi.sendMessage({customType,...},{triggerTurn,deliverAs}); pi.registerEntryRenderer + pi.appendEntry for session-persisted custom entries; per-tool renderCall/renderResult; streaming via onUpdate in execute(toolCallId, params, signal, onUpdate, ctx)
 - Flagship rendering demo: examples/extensions/doom-overlay/ runs DOOM as a TUI overlay at 35 FPS; also snake.ts, space-invaders.ts, tic-tac-toe.ts, plan-mode/, todo.ts, custom-footer.ts, overlay-qa-tests.ts (examples/extensions/README.md)
@@ -21,6 +22,7 @@ Primary sources: local installed package `@earendil-works/pi-coding-agent@0.79.1
 Extensions are TypeScript modules exporting `export default function (pi: ExtensionAPI)` (may be async; async init completes before `session_start`/`resources_discover`). Docs: https://pi.dev/docs/latest/extensions and https://pi.dev/docs/latest/tui (local: `docs/extensions.md`, `docs/tui.md`).
 
 ### UI API surface (`ctx.ui`)
+
 - Blocking dialogs: `confirm(title, msg)`, `select(title, items)`, `input(title, prompt)`, `editor(title, content)` — work in TUI **and** RPC modes (`ctx.hasUI` guard); `custom()` is TUI-only (`ctx.mode === "tui"` guard) — `docs/extensions.md:896-900`.
 - Non-blocking chrome: `notify(msg, level)`, `setStatus(key, text)` (footer), `setWidget(key, lines | (tui, theme) => Component, { placement: "aboveEditor" | "belowEditor" })` (`docs/extensions.md:2284-2288`), `setTitle(text)`, `setEditorText(text)`, `setFooter((tui, theme) => ...)` / `setFooter(undefined)` restores built-in (`docs/extensions.md:2291-2295`), `setHeader(...)`, `setWorkingIndicator({ frames })` (`docs/extensions.md:2270-2281`), `setWorkingMessage`, `setWorkingVisible`, `setHiddenThinkingLabel`, `setEditorComponent((tui, theme, keybindings) => new VimEditor(...))` to replace the whole editor (`docs/extensions.md:2336-2341`).
 - **Full custom components**: `ctx.ui.custom<T>((tui, theme, keybindings, done) => Component, options)` temporarily replaces the editor until `done(result)` is called (`docs/extensions.md:2403`).
@@ -28,12 +30,14 @@ Extensions are TypeScript modules exporting `export default function (pi: Extens
 - TUI building blocks from `@earendil-works/pi-tui`: `Text`, `Box`, `Container`, `Spacer`, `Markdown`, `Image`, plus a `Component` interface and Focusable/IME support for custom components (`docs/tui.md:189-330`). Doc covers invalidation/theme-change patterns and performance (`docs/tui.md:463-593`) and common patterns: SelectList dialog, async-with-cancel BorderedLoader, settings toggles, persistent status indicator, widgets above/below editor, custom footer, custom editor (vim mode).
 
 ### Live-updating renderers
+
 - **Custom message renderers** (participate in LLM context): `pi.registerMessageRenderer(customType, (message, {expanded}, theme) => Component)` + `pi.sendMessage({ customType, content, display: true }, { triggerTurn, deliverAs: "steer"|"followUp"|"nextTurn" })` (`docs/extensions.md:1511`).
 - **Custom entry renderers** (session-only, not sent to LLM): `pi.registerEntryRenderer("status-card", (entry, {expanded}, theme) => Component)` + `pi.appendEntry("status-card", data)` — durable, replayed on resume.
 - **Per-tool rendering**: tool definitions take `renderCall(args, theme, context)` and `renderResult(result, options, theme, context)`; overriding built-in tools inherits rendering per-slot if omitted.
 - Streaming tool progress: `execute(toolCallId, params, signal, onUpdate, ctx)` — call `onUpdate?.({content:[...]})` to live-update the tool cell; `tool_execution_start/update/end` events on the consumer side.
 
 ### Real example extensions doing custom rendering (all in `examples/extensions/`, also at https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent/examples/extensions/)
+
 - `doom-overlay/` — **DOOM running as an overlay at 35 FPS**, real-time game rendering, WASD input, auto-downloads shareware WAD (`examples/extensions/doom-overlay/README.md`).
 - `snake.ts`, `space-invaders.ts`, `tic-tac-toe.ts` (agent plays via `executionMode: "sequential"` tools) — games with custom UI + keyboard handling + session persistence.
 - `overlay-test.ts`, `overlay-qa-tests.ts` — anchors, margins, stacking, overflow, animation QA.
@@ -47,6 +51,7 @@ Extensions are TypeScript modules exporting `export default function (pi: Extens
 **Pi has NO native MCP.** README (`README.md`, also https://pi.dev): "**No MCP.** Build CLI tools with READMEs (see Skills), or build an extension that adds MCP support." Links Mario's rationale post: https://mariozechner.at/posts/2025-11-02-what-if-you-dont-need-mcp/. `docs/usage.md:306`: "It intentionally does not include built-in MCP, sub-agents, permission popups, plan mode, to-dos, or background bash. You can build or install those workflows as extensions or packages."
 
 **How people connect MCP servers today: the community extension `pi-mcp-adapter`** (npm, v2.11.0, author nicopreme / Nico Bailon, repo https://github.com/nicobailon/pi-mcp-adapter, ~129K downloads/mo — the top package on pi.dev/packages). Install: `pi install npm:pi-mcp-adapter`. Design:
+
 - **One proxy tool `mcp` (~200 tokens)** instead of registering every MCP tool: `mcp({ search: "screenshot" })` to discover, `mcp({ tool: "chrome_devtools_take_screenshot", args: '{"format":"png"}' })` to invoke (args is a JSON string). "Two calls instead of 26 tools cluttering the context."
 - Reads standard MCP config files with precedence: `~/.config/mcp/mcp.json` → `~/.pi/agent/mcp.json` (Pi global override) → `.mcp.json` (project) → `.pi/mcp.json` (Pi project override). `/mcp setup` imports host configs from Cursor/Claude Code/Codex; `pi-mcp-adapter init` CLI also available.
 - Transports: stdio (`command`/`args`/`env`/`cwd`) and HTTP (`url`, StreamableHTTP with SSE fallback), `auth: "bearer"|"oauth"` incl. dynamic client registration, client_credentials, and remote/headless OAuth via `mcp({action:"auth-start"...})` / `auth-complete`.
@@ -58,6 +63,7 @@ Extensions are TypeScript modules exporting `export default function (pi: Extens
 Three declarative resource types plus extensions; all four are bundled by **pi packages** (https://pi.dev/docs/latest/packages, `docs/packages.md`).
 
 ### Skills (`docs/skills.md`, https://pi.dev/docs/latest/skills)
+
 - Pi implements the **Agent Skills standard** (https://agentskills.io/specification), leniently — warns on most violations; notably does NOT require skill name == parent dir name (deliberate deviation for shared skill dirs).
 - Format: directory with `SKILL.md` (YAML frontmatter: required `name` ≤64 chars lowercase/hyphen, required `description` ≤1024 chars; optional `license`, `compatibility`, `metadata`, `allowed-tools` (experimental), `disable-model-invocation`). Missing description ⇒ skill not loaded. Freeform `scripts/`, `references/`, `assets/`.
 - Locations: `~/.pi/agent/skills/`, `~/.agents/skills/`, project `.pi/skills/` and `.agents/skills/` (walking ancestors to git root; project ones require trust), package `skills/` dirs or `pi.skills` in package.json, `skills` array in settings (interop: point at `~/.claude/skills`, `~/.codex/skills`), `--skill <path>`; `--no-skills` disables discovery.
@@ -65,15 +71,19 @@ Three declarative resource types plus extensions; all four are bundled by **pi p
 - Skill repos: https://github.com/anthropics/skills, https://github.com/badlogic/pi-skills (web search, browser automation, Google APIs, transcription).
 
 ### Prompt templates (`docs/prompt-templates.md`)
+
 Markdown files; filename becomes `/name` slash command. Frontmatter: optional `description`, `argument-hint` (`<required>` / `[optional]` shown in autocomplete). Locations: `~/.pi/agent/prompts/`, `.pi/prompts/` (trusted), package `prompts/` or `pi.prompts`, settings `prompts`, `--prompt-template`.
 
 ### Themes (`docs/themes.md`)
+
 JSON color-token files. Built-in `dark`/`light`; loaded from `~/.pi/agent/themes/`, `.pi/themes/` (trusted), package `themes/` or `pi.themes`, settings, `--theme`. Selected via `/settings` or `settings.json` `"theme"`.
 
 ### `resources_discover` — how extensions contribute resources (`docs/extensions.md:365-380`)
+
 Fired after `session_start`, `reason: "startup" | "reload"`; handler returns `{ skillPaths, promptPaths, themePaths }` (absolute file or directory paths). Startup order: `project_trust` → `session_start` → `resources_discover`. Working example `examples/extensions/dynamic-resources/index.ts` — returns `skillPaths: [join(baseDir,"SKILL.md")]`, `promptPaths: [dynamic.md]`, `themePaths: [dynamic.json]`.
 
 ### Packages (`docs/packages.md`)
+
 - `pi install npm:@foo/bar@1.0.0 | git:github.com/user/repo@v1 | https://... | /local/path`; `pi remove/list/update [--all|--extensions|--self]`; `-l` writes to project `.pi/settings.json` (team-shared, auto-installed after trust); `pi -e <pkg>` for ephemeral try-out.
 - Manifest: `package.json` `"pi": { "extensions": [...], "skills": [...], "prompts": [...], "themes": [...], "video", "image" }` + keyword `"pi-package"` for the https://pi.dev/packages gallery. Convention dirs (`extensions/`, `skills/`, `prompts/`, `themes/`) auto-discovered if no manifest. Glob + `!exclusion` patterns; settings-side per-package filtering with `+path`/`-path` force include/exclude.
 - Peer deps rule: `@earendil-works/pi-ai`, `pi-agent-core`, `pi-coding-agent`, `pi-tui`, `typebox` must be `peerDependencies: "*"`; other pi packages must be bundled (`bundledDependencies`). `pi config` enables/disables individual resources per scope. Project entry wins on global/project dedup.
@@ -81,6 +91,7 @@ Fired after `session_start`, `reason: "startup" | "reload"`; handler returns `{ 
 ## 4. Community ecosystem (pi.dev/packages gallery + GitHub)
 
 Philosophy (repo README): pi is "aggressively extensible"; no built-in MCP/sub-agents/plan-mode/to-dos — all delivered as packages. Notables from https://pi.dev/packages:
+
 - **pi-mcp-adapter** (nicopreme, ~129K/mo) — MCP bridge, see §2. Lazy server startup, on-demand tool discovery = dynamic capability surface.
 - **pi-subagents** (nicopreme, ~112K/mo) — task delegation with chains + parallel execution; **@tintinweb/pi-subagents** (~40K/mo) — Claude-Code-style autonomous sub-agents; **pi-crew** (bom0792, ~15K/mo) — coordinated AI teams / async task orchestration.
 - **@quintinshaw/pi-dynamic-workflows** (~25K/mo) — "fan a task out across 100s of subagents with real model routing, token/cost accounting, resume, git-worktree isolation" — the flagship long-running-status/orchestration package.
@@ -100,6 +111,7 @@ Philosophy (repo README): pi is "aggressively extensible"; no built-in MCP/sub-a
 - Providers are also dynamic: `pi.registerProvider(name, { baseUrl, api, models | refreshModels({signal}) })` / `pi.unregisterProvider(name)` at runtime.
 
 ## Extra load-bearing API details (for synthesis)
+
 - Event list (blockable/modifying): `project_trust` (return `{trusted, remember}`), `input` (return `{action:"continue"|"transform"|"handled", text?, images?}`), `before_agent_start` (inject message / modify systemPrompt), `tool_call` (mutate `event.input`, return `{block:true, reason}`), `tool_result` (patch `{content, details, isError}`), `context` (rewrite messages pre-LLM), `before_provider_headers/request`, `after_provider_response`, `message_start/update/end` (end can replace message), `session_before_switch/fork/compact/tree` (cancellable / custom compaction), `agent_start/end/settled`, `turn_start/end`, `model_select`, `thinking_level_select`, `user_bash`.
 - Commands/shortcuts/flags: `pi.registerCommand(name, { description, getArgumentCompletions, handler(args, ctx) })`, `pi.registerShortcut("ctrl+shift+p", {...})`, `pi.registerFlag("plan", { type, default })`.
 - Persistence idioms: state in tool-result `details` (branch-safe replay via `ctx.sessionManager.getBranch()`), or `pi.appendEntry(customType, data)` + reconstruction on `session_start`.

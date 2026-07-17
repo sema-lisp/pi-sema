@@ -1,4 +1,5 @@
 KEY FACTS:
+
 - ExtensionUIContext full surface at dist/core/extensions/types.d.ts:67-191 — select/confirm/input/notify, setStatus:79, setWidget (string[] or Component factory):96-99, setFooter:106, setHeader:110, custom overlay:116-126, editor:134, addAutocompleteProvider:136, setEditorComponent:170, theme APIs:174-190
 - Persistent live panels supported: setWidget keyed component factory (examples/extensions/widget-placement.ts, todo.ts), setFooter/setHeader, and ui.custom({overlay:true, overlayOptions, onHandle}) with OverlayHandle.hide/setHidden/focus and OverlayOptions.nonCapturing (pi-tui dist/tui.d.ts)
 - pi-tui component model: Component { render(width): string[]; handleInput?; invalidate() }, Container, TUI extends Container with differential line rendering and requestRender(force?); components Box/Text/Markdown/Loader/SelectList/Image etc. (pi-tui dist/index.d.ts)
@@ -14,6 +15,7 @@ KEY FACTS:
 # Pi Coding Agent Extension SDK — deep dive
 
 Paths (all under `PKG = /Users/helge/code/sema/pi-sema/node_modules/@earendil-works/pi-coding-agent`):
+
 - Main types: `PKG/dist/core/extensions/types.d.ts` (1208 lines, "T:" below)
 - Public exports: `PKG/dist/index.d.ts`
 - pi-tui (nested): `PKG/node_modules/@earendil-works/pi-tui/dist/` ("TUI:" below)
@@ -25,6 +27,7 @@ Extension model: default-export a factory `export type ExtensionFactory = (pi: E
 ## 1. UI surface
 
 ### ExtensionUIContext (T:67–191) — full member list
+
 ```ts
 select(title: string, options: string[], opts?: ExtensionUIDialogOptions): Promise<string | undefined>   // T:69
 confirm(title: string, message: string, opts?): Promise<boolean>                                          // T:71
@@ -52,11 +55,13 @@ getEditorComponent(): EditorFactory | undefined                                 
 readonly theme: Theme; getAllThemes(); getTheme(name); setTheme(theme): {success, error?}                 // T:174-186
 getToolsExpanded(): boolean; setToolsExpanded(expanded: boolean): void                                    // T:188-190
 ```
+
 - `ExtensionUIDialogOptions` (T:35–40): `{ signal?: AbortSignal; timeout?: number }` — timeout auto-dismisses with live countdown.
 - `WidgetPlacement = "aboveEditor" | "belowEditor"` (T:42); `ExtensionWidgetOptions = { placement?: WidgetPlacement }` (T:44–47, default aboveEditor).
 - `EditorFactory = (tui: TUI, theme: EditorTheme, keybindings: KeybindingsManager) => EditorComponent` (T:62).
 
 ### Persistent live-updating panel: YES, three ways
+
 1. **`setWidget(key, componentFactory)`** — keyed, persists until set to `undefined`; the factory returns a live `Component` whose state you mutate then call `tui.requestRender()`. Example: `examples/extensions/widget-placement.ts`, `todo.ts`. Best fit for workflow step status.
 2. **`setFooter` / `setHeader`** — replace whole footer/header with a component (`examples/extensions/custom-footer.ts` calls `footerData.onBranchChange(() => tui.requestRender())`).
 3. **`ui.custom(..., { overlay: true, overlayOptions, onHandle })`** — a floating overlay via `TUI.showOverlay`; `OverlayOptions` (TUI tui.d.ts) supports `width/minWidth/maxHeight` (number or `"50%"`), `anchor` (9 positions), `row/col`, `offsetX/Y`, `margin`, `visible(termW,termH)`, and `nonCapturing: true` (doesn't grab keyboard — so a non-modal live overlay is possible). `OverlayHandle`: `hide() / setHidden(bool) / isHidden() / focus() / unfocus() / isFocused()`. Note `custom()` returns a Promise resolved by `done(result)` — for a persistent panel just never call `done` or keep the handle via `onHandle`. Games in examples (`snake.ts`, `space-invaders.ts`, `doom-overlay`) prove long-lived interactive overlays.
@@ -64,6 +69,7 @@ getToolsExpanded(): boolean; setToolsExpanded(expanded: boolean): void          
 Custom message renderers: `pi.registerMessageRenderer<T>(customType: string, renderer: MessageRenderer<T>)` (T:865); `MessageRenderer<T> = (message: CustomMessage<T>, options: {expanded: boolean}, theme: Theme) => Component | undefined` (T:797–800). Pairs with `pi.sendMessage({customType, content, display, details}, {triggerTurn?, deliverAs?: "steer"|"followUp"|"nextTurn"})` (T:867–870) — renders a custom entry in the chat log (persistent, part of transcript).
 
 ### pi-tui component model (TUI/tui.d.ts, TUI/components/)
+
 - `interface Component { render(width: number): string[]; handleInput?(data: string): void; wantsKeyRelease?: boolean; invalidate(): void }` — components render to ANSI string lines; no layout engine beyond width.
 - `class Container implements Component { children; addChild/removeChild/clear }`; `class TUI extends Container` does **differential rendering** (diffs previous lines vs new, minimal redraw, throttled by `MIN_RENDER_INTERVAL_MS`), `requestRender(force?)`, `start()/stop()`, `showOverlay/hideOverlay/hasOverlay`, `setFocus(component)`, `addInputListener`, Kitty-image aware, IME hardware-cursor via `CURSOR_MARKER`, OSC-11 bg color + color-scheme queries.
 - Shipped components (TUI/index.d.ts): `Box(paddingX, paddingY, bgFn)` (padded/bg container), `Text(text, paddingX, paddingY, bgFn)` with `setText()` + word-wrap + caching, `Markdown` (full themed markdown incl. code highlight), `Loader` (animated spinner, `setMessage/setIndicator/start/stop`), `CancellableLoader`, `SelectList`, `SettingsList`, `Spacer`, `TruncatedText`, `Image` (Kitty/iTerm2), `Input`, `Editor`/`EditorComponent`, plus `fuzzyMatch/fuzzyFilter`, `matchesKey/parseKey/Key/KeyId`, `visibleWidth/truncateToWidth/wrapTextWithAnsi`, `CombinedAutocompleteProvider`, `AutocompleteProvider/AutocompleteItem`.
@@ -94,6 +100,7 @@ interface ToolDefinition<TParams extends TSchema = TSchema, TDetails = unknown, 
 }
 export declare function defineTool<...>(tool): ToolDefinition<...>   // T:375, preserves inference
 ```
+
 - `AgentToolResult<T> = { content: (TextContent|ImageContent)[]; details: T; terminate?: boolean }` (AC:305–315). `terminate` hints early stop of the tool batch.
 - `AgentToolUpdateCallback<T> = (partialResult: AgentToolResult<T>) => void` (AC:322) — scoped to the current execute; calls after settle are ignored.
 - **Live progress path**: `execute` calls `onUpdate(partial)` → fires `tool_execution_update` event (T:556–562: `{toolCallId, toolName, args, partialResult}`) and the TUI re-renders the tool row: your `renderResult` is invoked with `isPartial: true` (and `ToolRenderContext.isPartial`), so a long-running tool can stream a progress panel inline in the transcript. `ToolRenderContext` (T:306–331) gives `args, toolCallId, invalidate() (redraw just this row), lastComponent (reuse), state: TState (shared across renders), cwd, executionStarted, argsComplete, isPartial, expanded, showImages, isError`. `renderShell: "self"` lets the tool draw its own framing instead of the standard colored shell. Built-in bash tool streams output the same way (see `examples/extensions/built-in-tool-renderer.ts`, `truncated-tool.ts`).
@@ -115,7 +122,7 @@ Full `on()` surface (T:817–846): `project_trust, resources_discover, session_s
   - **Prompts** = prompt templates (prompt-templates.d.ts): markdown files → slash commands; `PromptTemplate {name, description, argumentHint?, content, sourceInfo, filePath}`; bash-style arg substitution `$1, $@, $ARGUMENTS, ${N:-def}, ${@:N:L}`.
 - **before_agent_start** (T:499–509): `{prompt, images?, systemPrompt, systemPromptOptions: BuildSystemPromptOptions}`; result (T:768–772) `{ message?: Pick<CustomMessage,...>; systemPrompt?: string }` — per-turn system-prompt replacement, chained across extensions. (pi-sema uses this to append Sema docs: `src/hooks/context.ts`.)
 - **tool_call blocking** (T:619–661, 747–751): fired before any tool executes; typed variants for built-ins (bash/read/edit/write/grep/find/ls) + `CustomToolCallEvent`; `event.input` is **mutable in place** to patch args; return `ToolCallEventResult { block?: boolean; reason?: string }` to veto. Narrow with `isToolCallEventType("bash", event)` (T:730–740). `tool_result` (T:662–702) can rewrite `{content?, details?, isError?}`.
-- **Session persistence**: `pi.appendEntry<T>(customType: string, data?: T): void` (T:879) — custom entry in the session JSONL, *not* sent to LLM (state persistence). Also `setSessionName/getSessionName` (T:881–883), `setLabel(entryId, label)` (T:885). `sessionManager: ReadonlySessionManager` on ctx; full `SessionManager` in `newSession({setup})`.
+- **Session persistence**: `pi.appendEntry<T>(customType: string, data?: T): void` (T:879) — custom entry in the session JSONL, _not_ sent to LLM (state persistence). Also `setSessionName/getSessionName` (T:881–883), `setLabel(entryId, label)` (T:885). `sessionManager: ReadonlySessionManager` on ctx; full `SessionManager` in `newSession({setup})`.
 - **ExtensionFlag** (T:1042–1048): `registerFlag(name, {description?, type: "boolean"|"string", default?})` (T:857) adds a CLI flag; read with `getFlag(name)` (T:863).
 - **Shortcuts** (T:852–855, ExtensionShortcut T:1049–1054): `registerShortcut(shortcut: KeyId, { description?, handler(ctx) })` — `KeyId` from pi-tui keys.ts (e.g. `"ctrl+g"`); user keybindings via `KeybindingsManager`/`AppKeybinding` (re-exported T:33) and docs/keybindings.md.
 - **Commands**: `registerCommand(name, {description?, getArgumentCompletions?, handler: (args: string, ctx: ExtensionCommandContext) => Promise<void>})` (T:850, RegisteredCommand T:801–807). `ExtensionCommandContext` (T:246–283) adds `waitForIdle, newSession, fork, navigateTree, switchSession, reload` and `getSystemPromptOptions`.
@@ -130,15 +137,18 @@ interface ExecResult  { stdout: string; stderr: string; code: number; killed: bo
 pi.exec(command: string, args: string[], options?: ExecOptions): Promise<ExecResult>   // T:887
 export declare function execCommand(command, args, cwd, options?): Promise<ExecResult> // also exported standalone
 ```
+
 Yes — managed exec with AbortSignal cancellation + timeout; `killed: true` reports termination. (pi-sema currently does NOT use it — `src/sema.ts` shells out with node `execSync/exec` + hand-rolled quoting/timeout; migrating to `pi.exec` would inherit cancellation from `ctx.signal`.)
 
 ## Current pi-sema usage (src/)
+
 - `src/index.ts`: default factory; `session_start` → `ctx.ui.notify` (missing binary) / `ctx.ui.setStatus("sema", "sema <ver>")`; static `pi.registerTool` ×4 (`sema_eval/fmt/build/compile`, TypeBox params in `src/tools/*.ts`, no `onUpdate`, no custom renderers, no promptSnippet); `pi.registerCommand` ×3 (`sema-run/fmt/build`).
 - `src/hooks/context.ts`: `before_agent_start` returns `{systemPrompt: event.systemPrompt + header + SEMA_KNOWLEDGE}` gated on `hasSemaFiles()`.
 - `src/hooks/resources.ts`: `resources_discover` returns empty `skillPaths/promptPaths/themePaths` — placeholder, no skills shipped yet.
 - Unused SDK headroom: onUpdate streaming, renderCall/renderResult, setWidget live panel, appendEntry, pi.exec, setActiveTools, registerShortcut, message renderers.
 
 ## Direct answers
+
 1. Persistent live TUI panel: **yes** — `setWidget(key, factory)` above/below editor, `setFooter/setHeader`, or non-capturing overlay via `ui.custom({overlay:true})` + `OverlayHandle`; update via `tui.requestRender()` on a diff-rendering line-based Component model (`render(width): string[]`).
 2. `registerTool` mid-session: **yes** (auto-activates + rebuilds system prompt); **no unregister**, but `setActiveTools` toggles per-turn; `ToolInfo/getAllTools` for introspection.
 3. Streaming: `execute(toolCallId, params, signal, onUpdate, ctx)`; `onUpdate(AgentToolResult)` → `tool_execution_update` + `renderResult(..., {isPartial:true})` live inline rendering; `renderShell:"self"` for full custom framing.
