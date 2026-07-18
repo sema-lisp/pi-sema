@@ -1,9 +1,10 @@
 # Break-Loop Restarts
+
 > Workflow step errors suspend instead of fail — the agent or user chooses continue-with-patch, redefine-and-retry, or abort, Lisp Machine style.
 
 ## Why (the non-obvious insight)
 
-Every current failure path in pi-sema treats an error as terminal-for-the-step: `runWorkflow` in `workflows/runner.ts` sets `state.status = "failed"` on a killed process, and `finalResult` tells the agent to retry the *whole run* via `resume=<run_id>` (memoized steps replay for free, but the failing step itself just reruns from scratch). That's the Unix-exception model — unwind and restart. Lisp Machines (and Common Lisp's condition system generally) offer a different move that no agent harness currently exploits: freeze the stack *at* the error, inspect and mutate live state, and resume the same computation. Sema already has the primitive that makes this real rather than aspirational — `sema dap` supports `setExceptionBreakpoints` with an `'uncaught'` filter and `evaluate`/`set!` writeback into a paused frame (`server.rs:876` `break_on_uncaught`, `vm.rs:4312` `debug_evaluate_mut`). Wiring workflow step execution through DAP-with-break-on-uncaught turns "retry from scratch" from the *only* option into the *last-resort* option.
+Every current failure path in pi-sema treats an error as terminal-for-the-step: `runWorkflow` in `workflows/runner.ts` sets `state.status = "failed"` on a killed process, and `finalResult` tells the agent to retry the _whole run_ via `resume=<run_id>` (memoized steps replay for free, but the failing step itself just reruns from scratch). That's the Unix-exception model — unwind and restart. Lisp Machines (and Common Lisp's condition system generally) offer a different move that no agent harness currently exploits: freeze the stack _at_ the error, inspect and mutate live state, and resume the same computation. Sema already has the primitive that makes this real rather than aspirational — `sema dap` supports `setExceptionBreakpoints` with an `'uncaught'` filter and `evaluate`/`set!` writeback into a paused frame (`server.rs:876` `break_on_uncaught`, `vm.rs:4312` `debug_evaluate_mut`). Wiring workflow step execution through DAP-with-break-on-uncaught turns "retry from scratch" from the _only_ option into the _last-resort_ option.
 
 ## How it works (user-visible behavior, step by step)
 
@@ -34,10 +35,10 @@ Effort: **XL**
 
 1. **DAP-driven step execution is a fundamentally different runtime path than today's `sema workflow run`** — steps may not currently be individually DAP-launchable, and `(load ...)/(import ...)` code is explicitly NOT debuggable per `sema-dap/src/lib.rs`, which could exclude exactly the multi-file workflows this is meant to rescue. Mitigation: scope v1 to single-file/inline step bodies only, matching the same harness-inlining workaround used by the Crash Autopsy idea.
 2. **Unattended runs have nobody to answer the restart prompt.** Mitigation: define a policy default (e.g. auto-abort after N seconds, or auto-continue-with-nil) for non-interactive contexts, surfaced via workflow `:budget`-style metadata.
-3. **Suspended state held across pi sessions requires the DAP process (or its resumability) to survive a session boundary**, which no existing pi-sema subprocess does — `McpProcess` is explicitly "never restarted mid-session." Mitigation: persist enough state (harness file, breakpoint spec, patched bindings) to *relaunch* a fresh `sema dap` and fast-forward via cassette replay rather than keeping the OS process alive across sessions.
+3. **Suspended state held across pi sessions requires the DAP process (or its resumability) to survive a session boundary**, which no existing pi-sema subprocess does — `McpProcess` is explicitly "never restarted mid-session." Mitigation: persist enough state (harness file, breakpoint spec, patched bindings) to _relaunch_ a fresh `sema dap` and fast-forward via cassette replay rather than keeping the OS process alive across sessions.
 
 ## Open questions
 
 - Can `sema workflow run` steps be launched individually under `sema dap`, or does this require a new sema CLI mode that runs a single step in isolation?
-- What happens to steps *downstream* of a suspended one — do they block, or does the workflow DAG need to expose partial progress while one branch is paused?
+- What happens to steps _downstream_ of a suspended one — do they block, or does the workflow DAG need to expose partial progress while one branch is paused?
 - Is "redefine and retry the frame" well-defined when the redefinition changes the function's arity or the frame's captured closure — does sema's DAP support re-entering a frame with a structurally different function?

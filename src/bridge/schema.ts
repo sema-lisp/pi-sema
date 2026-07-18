@@ -20,10 +20,9 @@ export function sanitizeSchema(input: unknown): TSchema {
     delete schema.required;
   }
   schema.properties = Object.fromEntries(
-    Object.entries(schema.properties as Record<string, unknown>).map(([key, prop]) => [
-      key,
-      normalizeProperty(prop),
-    ]),
+    Object.entries(schema.properties as Record<string, unknown>).map(
+      ([key, prop]) => [key, normalizeProperty(prop)],
+    ),
   );
   return schema as unknown as TSchema;
 }
@@ -66,7 +65,9 @@ function normalizeProperty(prop: unknown): unknown {
   if (out.items) out.items = normalizeProperty(out.items);
   if (out.properties && typeof out.properties === "object") {
     out.properties = Object.fromEntries(
-      Object.entries(out.properties as Record<string, unknown>).map(([k, v]) => [k, normalizeProperty(v)]),
+      Object.entries(out.properties as Record<string, unknown>).map(
+        ([k, v]) => [k, normalizeProperty(v)],
+      ),
     );
   }
   return out;

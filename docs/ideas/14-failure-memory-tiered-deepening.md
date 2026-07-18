@@ -1,10 +1,13 @@
 # Failure Memory with Tiered Deepening
+
 > Index every journaled failure as episodic memory, and use retrieval hits to surface deeper tool guidance only when the current step actually resembles a past failure.
 
 ## Why (the non-obvious insight)
-Two things pi-sema already has are secretly one mechanism away from a research-grade result: (1) journaled runs (`src/workflows/journal.ts`, `JournalEvent`, plus MCP tool_call results flowing through `SemaBridge`) contain a rich failure history nobody re-reads, and (2) forged/library tools (`src/library/store.ts`, `LibraryStore`) currently expose exactly one flat description string per tool via MCP `tools/list` → `registerOne()` in `src/bridge/bridge.ts`. Two independent findings say the fix isn't "write better docs" — it's *when* the docs arrive. Layered disclosure research shows giving the full gotcha-laden doc up front wastes context and gets ignored (mid-length "Tier-1" guidance recovers most of the value of the full doc at a fraction of the tokens), while pre-execution competence probing (asking the model up front "do you know how to use X") doesn't predict who needs the deeper doc — only an actual failure, or a strong resemblance to one, does. So: don't pre-inject anything. Score the current context against a store of past failure embeddings, and only when there's a real match, hot-swap the tool's description to a deeper tier through the live bridge — the same mechanism `forge.ts` already uses (`bridge.injectSource` / `bridge.refresh()`) to make freshly-forged tools appear without a restart.
+
+Two things pi-sema already has are secretly one mechanism away from a research-grade result: (1) journaled runs (`src/workflows/journal.ts`, `JournalEvent`, plus MCP tool_call results flowing through `SemaBridge`) contain a rich failure history nobody re-reads, and (2) forged/library tools (`src/library/store.ts`, `LibraryStore`) currently expose exactly one flat description string per tool via MCP `tools/list` → `registerOne()` in `src/bridge/bridge.ts`. Two independent findings say the fix isn't "write better docs" — it's _when_ the docs arrive. Layered disclosure research shows giving the full gotcha-laden doc up front wastes context and gets ignored (mid-length "Tier-1" guidance recovers most of the value of the full doc at a fraction of the tokens), while pre-execution competence probing (asking the model up front "do you know how to use X") doesn't predict who needs the deeper doc — only an actual failure, or a strong resemblance to one, does. So: don't pre-inject anything. Score the current context against a store of past failure embeddings, and only when there's a real match, hot-swap the tool's description to a deeper tier through the live bridge — the same mechanism `forge.ts` already uses (`bridge.injectSource` / `bridge.refresh()`) to make freshly-forged tools appear without a restart.
 
 ## How it works (user-visible behavior, step by step)
+
 1. Every failed `tool_call`/`agent.tool_call` (workflows) or MCP tool call marked `isError` (interactive sessions) gets embedded and written to a small on-disk vector store scoped to `.sema/memory/failures` alongside the run root, keyed by `{tool, error class, context snippet}`.
 2. Each library tool that has ever failed gets a second, deeper description tier authored once (by a cheap model, at forge time or lazily on first failure) and cached next to the tool source, e.g. `tools/pdf-extract.tier1.md` beside `tools/pdf-extract.sema`.
 3. On every subsequent tool call, before dispatch, pi-sema embeds the current step's context (recent messages/tool args) and does a nearest-neighbor lookup against the failure store, scored by recency × importance × cosine similarity (the same three-factor scoring used in generative-agent memory streams).
@@ -12,6 +15,7 @@ Two things pi-sema already has are secretly one mechanism away from a research-g
 5. The tool call proceeds; whether the deepening actually rescued the run (success this time vs. same failure again) is logged back to the journal as a labeled outcome, feeding a coarse "which error→tier pairing actually helps" signal for later tuning.
 
 ## Architecture (which pi-sema modules touched/added)
+
 - New `src/memory/store.ts`: append-only failure log + embedding index (Sema's own `(llm/embed ...)` / `(vector-store/create ...)` primitives, invoked via `spawnSema`/`sema eval --json` the same way `src/forge/probe.ts` shells out for verification — no new embedding infra needed since Sema already has one).
 - Journal side: `src/workflows/journal.ts`/`model.ts` already surface `agent.tool_call` and `agent.result` events with `status`; add a listener (parallel to `JournalTailer.on`) in `runner.ts`'s `onState` path that writes failure entries when `agent.result.status === "failed"`.
 - Interactive (non-workflow) side: `SemaBridge.registerOne()` in `src/bridge/bridge.ts` already inspects `result.isError` in its `execute()` wrapper — add a hook there to log MCP-tool failures the same way.
@@ -21,9 +25,11 @@ Two things pi-sema already has are secretly one mechanism away from a research-g
 - Data flow: journal/MCP failure → embed via `sema eval` → `memory/store.ts` → (next tool call) `memory/gate.ts` lookup → `bridge.registerOne()` re-registration → journal outcome label.
 
 ## Grounding & prior art (from the idea's grounding field)
+
 Episodic memory scoring insight (Generative Agents — recency × importance × relevance retrieval); layered L0/L1/L2 disclosure insight (68% recovery at 11% of full-doc tokens — deepening is cheap when it's targeted); execution-aware gating beats pre-execution probing insight (competence self-report doesn't predict who needs help; an actual failure does); confidence-calibration insight (only deepen on high-confidence matches, to avoid noisy false triggers burning context on irrelevant tiers); whole-tool (not section) gating insight (swap the entire tier, don't try to splice partial doc fragments into a schema — matches how MCP tool descriptions are atomic strings in `bridge.ts` already).
 
 ## Effort & risks
+
 Effort: **L**
 
 1. **Cold start — no failures yet means no deepening ever fires, so the first occurrence of any bug gets zero benefit.** Mitigation: seed Tier-1 docs for tools with docstring-adjacent known gotchas at forge time (the forge already asks the model to write source + description; extend `CREATE_TOOL_GUIDELINES` in `src/forge/prompts.ts` to also emit a starter gotcha list), so deepening has content even before the first real failure.
@@ -31,6 +37,7 @@ Effort: **L**
 3. **Embedding + lookup on every tool call adds latency to the hot path.** Mitigation: cache embeddings for repeated near-identical contexts, run the lookup only for tools that have >0 recorded failures (skip entirely for clean tools), and keep the vector store small/local (per-project, not global) so lookup stays sub-100ms.
 
 ## Open questions
+
 - Should Tier-1 docs be versioned per model (mirroring the model-version-dependent interference finding from the Description Darwinism idea), or is one Tier-1 per tool sufficient?
 - Where does the failure store live for project vs. global tools — mirrored to the same tier split as `LibraryStore`, or always project-local since failure context is usually repo-specific?
 - Is per-step embedding via `sema eval` (subprocess spawn) fast enough to gate every tool call, or does it need a persistent embedding session on the live bridge process instead?

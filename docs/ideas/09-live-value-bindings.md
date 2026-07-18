@@ -1,15 +1,16 @@
 # Live Value Bindings: CaveAgent-style state injection over the bridge
+
 > Stop round-tripping 10k-token tool outputs through the model's context — keep big values in the live Sema image, hand the agent a name.
 
 ## Why (the non-obvious insight)
 
-pi-sema already has the one precondition this needs for free: `sema mcp` is a **single long-lived process per session** (`src/bridge/process.ts`), and the `eval` tool runs against a *shared, persistent environment* — `deftool` definitions injected by the forge are visible on the very next call. That's already "runtime as locus of state." What pi-sema does *not* do yet is exploit it for data, only for code. Every tool result, however large, is flattened to a text block and shipped into the model's context (`SemaBridge.registerOne`, `bridge.ts:271-279`, joins `result.content` into one string with no size check). A `docs_search` hit list, a disasm dump, or a notebook dataframe pays full token price every time it's touched, and diluted attention on a 10k-token blob is a known failure mode (the Arize postmortem). CaveAgent's insight — don't move the value, move a reference to it — maps almost exactly onto what the bridge already has: a durable eval environment that outlives any single tool call.
+pi-sema already has the one precondition this needs for free: `sema mcp` is a **single long-lived process per session** (`src/bridge/process.ts`), and the `eval` tool runs against a _shared, persistent environment_ — `deftool` definitions injected by the forge are visible on the very next call. That's already "runtime as locus of state." What pi-sema does _not_ do yet is exploit it for data, only for code. Every tool result, however large, is flattened to a text block and shipped into the model's context (`SemaBridge.registerOne`, `bridge.ts:271-279`, joins `result.content` into one string with no size check). A `docs_search` hit list, a disasm dump, or a notebook dataframe pays full token price every time it's touched, and diluted attention on a 10k-token blob is a known failure mode (the Arize postmortem). CaveAgent's insight — don't move the value, move a reference to it — maps almost exactly onto what the bridge already has: a durable eval environment that outlives any single tool call.
 
 ## How it works (user-visible behavior, step by step)
 
 1. Agent calls `sema_docs_search` (or any bridge tool). The result is 8,000 tokens of hits.
 2. Instead of returning the text, pi-sema evaluates `(def $r17 <value>)` in the live server env and returns: `{binding: "$r17", type: "list", shape: "23 items", preview: "[{title: \"pattern-match\", ...}, ...]"}` — a few hundred tokens, structure-preserving (the Arize fix: never truncate mid-structure).
-3. Agent's next move is a short Sema expression via a new `sema_eval_on` tool: `(nth $r17 3)`, `(filter (fn (h) (str/contains? (:title h) "macro")) $r17)`. Only the *filtered* result comes back — often small enough to inline directly.
+3. Agent's next move is a short Sema expression via a new `sema_eval_on` tool: `(nth $r17 3)`, `(filter (fn (h) (str/contains? (:title h) "macro")) $r17)`. Only the _filtered_ result comes back — often small enough to inline directly.
 4. The TUI status/footer (extending `ui/dashboard.ts` conventions) shows a live-bindings table (`$r17: list, 23 items, docs_search @ 14:02`) so the user can see what the agent is holding without it costing a token.
 5. Bindings are swept on `session_shutdown` (the bridge process dies with the session) or on an explicit `sema_forget $r17`.
 

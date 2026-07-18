@@ -1,9 +1,10 @@
 # Blast Radius: call-hierarchy gate before shared-tool edits
+
 > Before a shared deftool changes, show the agent (and the human approving it) exactly who calls it — not a grep guess, a real symbol graph.
 
 ## Why (the non-obvious insight)
 
-pi-sema's forge already has the *one* human gate that matters (`create_sema_tool`'s `ctx.ui.confirm` in `src/forge/forge.ts:106-117`) but it shows the source diff, not the *impact* — the approval text is `"Create Sema tool X? <description> <source>"` with zero information about what else depends on the symbol being redefined. Meanwhile `sema-lsp` already computes exactly this graph server-side: `crates/sema-lsp/src/server.rs` implements full LSP call hierarchy (`CallHierarchyPrepare`/`Incoming`/`Outgoing`, lines 123-136, 651-692), `textDocument/references` (line 369), and `prepareRename`/`rename` (lines 488, 507). None of it is wired into pi-sema today — there is no LSP client anywhere under `src/`. The Claude Code issue #40282 finding ("agents use ~10% of LSP") is exactly the gap here: pi-sema has a bridge to Sema's *runtime* but not to its *language server*, so every forge edit is source-text-blind to its blast radius even though the data already exists one process away.
+pi-sema's forge already has the _one_ human gate that matters (`create_sema_tool`'s `ctx.ui.confirm` in `src/forge/forge.ts:106-117`) but it shows the source diff, not the _impact_ — the approval text is `"Create Sema tool X? <description> <source>"` with zero information about what else depends on the symbol being redefined. Meanwhile `sema-lsp` already computes exactly this graph server-side: `crates/sema-lsp/src/server.rs` implements full LSP call hierarchy (`CallHierarchyPrepare`/`Incoming`/`Outgoing`, lines 123-136, 651-692), `textDocument/references` (line 369), and `prepareRename`/`rename` (lines 488, 507). None of it is wired into pi-sema today — there is no LSP client anywhere under `src/`. The Claude Code issue #40282 finding ("agents use ~10% of LSP") is exactly the gap here: pi-sema has a bridge to Sema's _runtime_ but not to its _language server_, so every forge edit is source-text-blind to its blast radius even though the data already exists one process away.
 
 ## How it works (user-visible behavior, step by step)
 

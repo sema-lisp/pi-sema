@@ -1,10 +1,13 @@
 # Annotated Forge Approval: inline comments on deftool source
+
 > Replace the forge's yes/no confirm dialog with an annotatable diff surface, so approval becomes steering, not just a gate.
 
 ## Why (the non-obvious insight)
-The forge's human gate today is exactly one bit: `ctx.ui.confirm("Create Sema tool ...?", "<description>\n\n<source>\n\nVerified in strict sandbox...")` in `src/forge/forge.ts` (step 2 of `create_sema_tool`'s `execute`). It's already the single mandatory checkpoint before anything persists or gets injected into the live environment — the right chokepoint architecturally, but the interaction it offers throws away the highest-value signal a human reviewer produces: *which specific form* they objected to and *why*. Approve/reject forces the human to either accept something they have a reservation about or reject-and-restate-in-prose something they could have pointed at directly. Sema source is s-expressions, and the LSP already knows their exact boundaries (`selectionRange`/`foldingRange`, `server.rs:256-259, 596-...`), so "comment on this form" is a well-defined, already-computable operation, not a fuzzy line-range guess. And because the forge already re-runs the full probe on every resubmission (the `rounds` map in `forge.ts` tracks refinement rounds), routing annotations through one more probe+approval cycle costs nothing architecturally — it's the same loop the forge already runs when a probe fails, just fed by structured human feedback instead of only compiler errors.
+
+The forge's human gate today is exactly one bit: `ctx.ui.confirm("Create Sema tool ...?", "<description>\n\n<source>\n\nVerified in strict sandbox...")` in `src/forge/forge.ts` (step 2 of `create_sema_tool`'s `execute`). It's already the single mandatory checkpoint before anything persists or gets injected into the live environment — the right chokepoint architecturally, but the interaction it offers throws away the highest-value signal a human reviewer produces: _which specific form_ they objected to and _why_. Approve/reject forces the human to either accept something they have a reservation about or reject-and-restate-in-prose something they could have pointed at directly. Sema source is s-expressions, and the LSP already knows their exact boundaries (`selectionRange`/`foldingRange`, `server.rs:256-259, 596-...`), so "comment on this form" is a well-defined, already-computable operation, not a fuzzy line-range guess. And because the forge already re-runs the full probe on every resubmission (the `rounds` map in `forge.ts` tracks refinement rounds), routing annotations through one more probe+approval cycle costs nothing architecturally — it's the same loop the forge already runs when a probe fails, just fed by structured human feedback instead of only compiler errors.
 
 ## How it works (user-visible behavior, step by step)
+
 1. Agent calls `create_sema_tool`; the strict-sandbox probe passes as today (`verifyToolSource`, `src/forge/probe.ts`).
 2. Instead of `ctx.ui.confirm`, pi-sema opens a `ctx.ui.custom` overlay rendering the source with line numbers and form boundaries highlighted (mirroring the `DashboardComponent` overlay pattern in `src/ui/dashboard.ts`).
 3. User navigates with arrow keys/vim keys; a keybinding (e.g. `c`) attaches a free-text comment to the form under the cursor, snapped to that form's boundaries via the LSP's `selectionRange` so a comment on `(defn helper ...)` doesn't accidentally anchor to a sibling line.
@@ -13,6 +16,7 @@ The forge's human gate today is exactly one bit: `ctx.ui.confirm("Create Sema to
 6. On persist, the annotations (attached to specific forms, with resolution: "addressed" / "overridden by user") are journaled alongside the tool version in `LibraryStore`, independent of whether they changed the final source.
 
 ## Architecture (which pi-sema modules touched/added)
+
 - `src/forge/forge.ts`: step 2's `ctx.ui.confirm(...)` call is replaced by a call into a new `src/forge/annotate.ts` overlay component, following the exact overlay-construction shape `registerDashboard` uses in `src/ui/dashboard.ts` (`ctx.ui.custom<T>((tui, theme, keybindings, done) => new Component(...), { overlay: true, overlayOptions: {...} })`). The `rounds` refinement-count map already in `forge.ts` naturally extends to count "annotation revision" rounds against the same `cfg.forge.maxRounds` cap.
 - Form boundaries: reuses the LSP client proposed in the Form Runner idea (`src/lsp/client.ts`) for `selectionRange`/`foldingRange` (`sema-lsp/src/server.rs:545,596`, capabilities advertised at `:256-259`) to anchor comments to s-expressions instead of raw line numbers — if the Form Runner idea isn't built first, a regex-based paren-matcher over the source string is an acceptable fallback since the forge already parses `deftool` boundaries with regex (`extractDeftoolName` in `forge.ts`).
 - Revision pass: a new helper in `src/forge/prompts.ts` (alongside the existing `CREATE_TOOL_DESCRIPTION`/`CREATE_TOOL_GUIDELINES`) constructing a revision prompt from `{source, annotations: [{form, comment}]}`; the model call itself goes through pi's normal model-call surface (same path any pi tool that needs a sub-completion would use), not a raw `sema eval`.
@@ -21,9 +25,11 @@ The forge's human gate today is exactly one bit: `ctx.ui.confirm("Create Sema to
 - Data flow: probe-passed source → annotate overlay (LSP selectionRanges for anchoring) → annotations → revision model call → `verifyToolSource` re-probe → final approve/reject → `LibraryStore.save()` + annotation journal + `bridge.injectSource`/`bridge.refresh()` (unchanged from today's steps 4-5 in `forge.ts`).
 
 ## Grounding & prior art (from the idea's grounding field)
+
 plannotator interactive-plan-review insight (inline commenting on a structured artifact beats prose-only approve/reject for steering quality); pi custom editor/overlay + keybinding API (the same primitives `src/ui/dashboard.ts` already exercises for a navigable, keyboard-driven overlay); trajectory-annotation accumulation insight (human tags on specific forms are reusable ground truth for later automated passes, at zero extra collection cost since the annotation already happens during a mandatory gate); LSP selection-ranges capability (structural anchoring instead of brittle line-number anchoring).
 
 ## Effort & risks
+
 Effort: **M**
 
 1. **Revision passes could loop indefinitely if the model keeps missing the annotation's intent.** Mitigation: reuse the forge's existing `maxRounds`/`rounds` map verbatim — annotation-revision rounds count against the same cap that already governs probe-failure retries, so the "give up and ask the user" exit (`forge.ts`'s `gave_up` path) applies unchanged.
@@ -31,6 +37,7 @@ Effort: **M**
 3. **Annotation UI adds real interaction cost to a gate that's currently a single keypress, which could get in the way when the user just wants to approve quickly.** Mitigation: preserve the zero-annotation fast path exactly as today's `ctx.ui.confirm` behaves (single approve key, no forced interaction with the annotation UI) — annotation is opt-in per review, never mandatory.
 
 ## Open questions
-- Should annotations from a *rejected* tool (never persisted) still be journaled for future SOP/description-mining passes, or only annotations attached to eventually-approved tools?
+
+- Should annotations from a _rejected_ tool (never persisted) still be journaled for future SOP/description-mining passes, or only annotations attached to eventually-approved tools?
 - Does the revision model call need its own budget accounting (it's a real LLM call outside the strict-sandbox probe), and if so does it route through the same workflow budget machinery as the Burn-Rate Horizon idea, or is it always small enough to ignore?
 - How should multi-annotation conflicts be resolved when the revision model can only partially satisfy two comments on the same form (e.g. "make this simpler" vs. "add more error handling")?
