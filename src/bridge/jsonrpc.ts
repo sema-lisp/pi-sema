@@ -38,13 +38,9 @@ export class JsonRpcClient {
   constructor(
     private readonly stdin: Writable,
     stdout: Readable,
-    /**
-     * Lazily-evaluated crash detail appended to the stdout-closed error.
-     * Node fires the stream's 'close' BEFORE the child's 'close' (which waits
-     * for all stdio), so the process-level rich error is deterministically
-     * unreachable for pending-request rejection — this closure is how exit
-     * code + stderr reach the caller.
-     */
+    // Lazily-built crash detail (exit code + stderr) for the stdout-closed
+    // error — the stream's 'close' fires before the child's, so this closure
+    // is the only way that detail reaches a pending-request rejection.
     private readonly closeDetail?: () => string,
   ) {
     stdout.on("data", (chunk: Buffer) => this.onData(chunk.toString("utf-8")));
@@ -154,6 +150,16 @@ export interface McpContentBlock {
 export interface McpCallResult {
   content: McpContentBlock[];
   isError?: boolean;
+}
+
+/** Flatten MCP content blocks to text; non-text blocks render as `[type]`. */
+export function contentToText(content: McpContentBlock[]): string {
+  return content
+    .map((block) =>
+      block.type === "text" ? (block.text ?? "") : `[${block.type}]`,
+    )
+    .join("\n")
+    .trim();
 }
 
 export const MCP_PROTOCOL_VERSION = "2024-11-05";

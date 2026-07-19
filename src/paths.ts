@@ -6,10 +6,11 @@ export type TierName = "project" | "global";
 
 export interface Tier {
   name: TierName;
+  /** Absolute path to the tier's pi-sema directory. */
   root: string;
 }
 
-/** Global tier lives under pi's own agent dir: ~/.pi/agent/pi-sema */
+/* Global tier lives under pi's own agent dir: ~/.pi/agent/pi-sema */
 export function globalRoot(): string {
   return join(homedir(), ".pi", "agent", "pi-sema");
 }

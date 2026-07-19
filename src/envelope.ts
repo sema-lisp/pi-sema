@@ -1,8 +1,8 @@
-/**
- * The JSON envelope emitted by `sema eval --json` (main.rs run_eval):
- * `{ok, value, stdout, stderr, elapsedMs, error: {message, hint, line, col}}`.
- * Note the error object is NESTED — there are no flat error_* fields.
- */
+// Parsing + formatting for the JSON envelope `sema eval --json` emits:
+// `{ok, value, stdout, stderr, elapsedMs, error: {message, hint, line, col}}`.
+// The error object is NESTED — there are no flat error_* fields.
+import { formatLineCol, tryParseJson } from "./util.js";
+
 export interface SemaError {
   message: string;
   hint?: string;
@@ -24,19 +24,18 @@ export function parseEnvelope(stdout: string): SemaJsonEnvelope | null {
   const trimmed = stdout.trim();
   if (!trimmed) return null;
 
-  const candidates = [trimmed, trimmed.slice(trimmed.lastIndexOf("\n") + 1)];
+  // Try the whole output, then just the last line (tolerates leading program output).
+  const candidates = trimmed.includes("\n")
+    ? [trimmed, trimmed.slice(trimmed.lastIndexOf("\n") + 1)]
+    : [trimmed];
   for (const candidate of candidates) {
-    try {
-      const parsed = JSON.parse(candidate);
-      if (
-        parsed &&
-        typeof parsed === "object" &&
-        typeof parsed.ok === "boolean"
-      ) {
-        return parsed as SemaJsonEnvelope;
-      }
-    } catch {
-      // fall through to next candidate
+    const parsed = tryParseJson<SemaJsonEnvelope>(candidate);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.ok === "boolean"
+    ) {
+      return parsed;
     }
   }
   return null;
@@ -47,10 +46,6 @@ export function formatSemaError(
   fallback = "unknown error",
 ): string {
   if (!error) return fallback;
-  const location =
-    error.line != null
-      ? ` (line ${error.line}${error.col != null ? `:${error.col}` : ""})`
-      : "";
   const hint = error.hint ? `\nhint: ${error.hint}` : "";
-  return `${error.message}${location}${hint}`;
+  return `${error.message}${formatLineCol(error.line, error.col)}${hint}`;
 }

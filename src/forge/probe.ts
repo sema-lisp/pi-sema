@@ -19,18 +19,13 @@ export async function verifyToolSource(
   name: string,
   opts: { timeoutMs: number; cwd?: string; signal?: AbortSignal },
 ): Promise<ProbeResult> {
-  // Sema resolves free variables at CALL time, so an unbound stdlib name
-  // inside the lambda body (e.g. string/concat) evaluates fine at deftool
-  // time and only explodes on first real use. Force resolution now: reference
-  // every slash-namespaced symbol the source mentions as a bare top-level
-  // expression — bound builtins are no-op value references, unbound ones fail
-  // the probe with the exact "Unbound variable: X" the model needs.
+  // Sema binds free variables lazily at call time, so reference every
+  // namespaced symbol as a bare top-level expr now — unbound builtins fail the
+  // probe here instead of on the tool's first real use.
   const symbolChecks = collectNamespacedSymbols(source)
     .map((sym) => sym + "\n")
     .join("");
-  // tool? is a VALUE predicate: pass the symbol deftool bound, not a string.
-  // An unbound symbol errors with a clear "unbound symbol" diagnostic, which
-  // is exactly the right feedback when the deftool name doesn't match.
+  // tool? is a value predicate — pass the symbol deftool bound, not a string.
   const probeSuffix = `\n${symbolChecks}(if (tool? ${name}) :probe-ok (error "symbol ${name} is bound but is not a tool — did deftool get shadowed?"))\n`;
   const result = await spawnSema(
     ["eval", "--stdin", "--json", "--sandbox", "strict", "--no-llm"],

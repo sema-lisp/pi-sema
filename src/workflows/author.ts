@@ -1,3 +1,14 @@
+/**
+ * Workflow authoring — validate and store a `(defworkflow …)`, never run it.
+ *
+ * WHAT: registers `submit_sema_workflow`; `submitWorkflow` is the testable core
+ * (static check → preview → confirm → store). Running lives in runner.ts.
+ *
+ * HOW/WHY: validation is `sema workflow check --strict --json` with no LLM or
+ * eval, gated on the parsed error count (under --strict a warning alone flips
+ * the exit code, so the exit code can't be the gate). Keeping authoring and
+ * running as separate tools/files keeps all live-status logic in one place.
+ */
 import { Type } from "typebox";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,6 +20,8 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
 import { sanitizeName } from "../library/store.js";
+import { toolText, toolError } from "../tool-result.js";
+import { extractSingleFormName } from "../util.js";
 import { workflowCheck, formatDiagnostics } from "./check.js";
 import { SUBMIT_WORKFLOW_DESCRIPTION } from "../forge/prompts.js";
 
@@ -41,9 +54,7 @@ type SubmitParams = {
 };
 
 export function extractDefworkflowName(source: string): string | null {
-  const matches = [...source.matchAll(/\(defworkflow\s+([^\s()]+)/g)];
-  if (matches.length !== 1) return null;
-  return matches[0][1];
+  return extractSingleFormName(source, "defworkflow");
 }
 
 /** Human-readable shape preview: phases, fan-out widths, budget, loads. */
@@ -89,11 +100,11 @@ export async function submitWorkflow(
   try {
     name = sanitizeName(p.name);
   } catch (err) {
-    return fail(String(err instanceof Error ? err.message : err));
+    return toolError(String(err instanceof Error ? err.message : err));
   }
   const declared = extractDefworkflowName(p.source);
   if (!declared) {
-    return fail("source must contain exactly one (defworkflow …) form");
+    return toolError("source must contain exactly one (defworkflow …) form");
   }
 
   // Static validation — no LLM, no eval. Gate on error-level diagnostics only:
@@ -110,11 +121,11 @@ export async function submitWorkflow(
     const maxRounds = runtime.cfg.forge.maxRounds;
     if (round >= maxRounds) {
       rounds.delete(name);
-      return fail(
+      return toolError(
         `status: gave_up after ${round} rounds.\n${formatDiagnostics(check.errors)}\nStop retrying; report the failure to the user.`,
       );
     }
-    return fail(
+    return toolError(
       `status: check_failed (round ${round}/${maxRounds})\n${formatDiagnostics(check.errors)}\nFix the source and call submit_sema_workflow again.`,
     );
   }
@@ -134,7 +145,7 @@ export async function submitWorkflow(
     );
     if (!approved) {
       rounds.delete(name);
-      return fail(
+      return toolError(
         "status: declined — the user rejected this workflow. Ask what to change; do not resubmit unchanged.",
       );
     }
@@ -157,19 +168,13 @@ export async function submitWorkflow(
     p.args && Object.keys(p.args).length > 0
       ? ` args=${JSON.stringify(p.args)}`
       : "";
-  return {
-    content: [
-      {
-        type: "text",
-        text: `status: stored\nPath: ${path} (${tier} tier)${warningText}\n${
-          runNow
-            ? `The user approved running it — call sema_workflow_run with workflow="${name}"${argsHint} now.`
-            : `Not run. The user can run it later via sema_workflow_run or /sema:workflows.`
-        }`,
-      },
-    ],
-    details: {},
-  };
+  return toolText(
+    `status: stored\nPath: ${path} (${tier} tier)${warningText}\n${
+      runNow
+        ? `The user approved running it — call sema_workflow_run with workflow="${name}"${argsHint} now.`
+        : `Not run. The user can run it later via sema_workflow_run or /sema:workflows.`
+    }`,
+  );
 }
 
 export function registerWorkflowAuthoring(
@@ -186,14 +191,10 @@ export function registerWorkflowAuthoring(
     parameters: params,
     async execute(_id, p, signal, _onUpdate, ctx) {
       const runtime = getRuntime();
-      if (!runtime) return fail("pi-sema is not initialized");
+      if (!runtime) return toolError("pi-sema is not initialized");
       return submitWorkflow(runtime, ctx, p as SubmitParams, rounds, signal);
     },
   });
-}
-
-function fail(text: string): AgentToolResult<{ isError?: boolean }> {
-  return { content: [{ type: "text", text }], details: { isError: true } };
 }
 
 function truncate(text: string, max: number): string {

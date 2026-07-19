@@ -1,3 +1,17 @@
+/**
+ * The bridge subsystem — Sema's MCP server as native pi tools.
+ *
+ * WHAT: owns the one long-lived `sema mcp` child (via McpProcess/JsonRpcClient)
+ * and mirrors each server tool into a `sema_*` pi tool. Companion files:
+ * process.ts (lifecycle), jsonrpc.ts (line-delimited JSON-RPC), schema.ts
+ * (schema + name normalization).
+ *
+ * HOW/WHY: `sema mcp` recomputes its tools/list from the live env on every
+ * call, so `refresh()` diffs that list and registers newcomers — which is what
+ * lets a forged deftool become callable with no restart. Two tools are special-
+ * cased: `run_file` runs in its own subprocess (a crashing script can't kill
+ * the bridge), and an `eval` that defines a tool triggers an auto-refresh.
+ */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import type { AgentToolResult } from "@earendil-works/pi-coding-agent";
 import type { PiSemaConfig } from "../config.js";
@@ -6,29 +20,28 @@ import { McpProcess } from "./process.js";
 import {
   mcpListTools,
   mcpCallTool,
+  contentToText,
   type McpCallResult,
   type McpTool,
 } from "./jsonrpc.js";
 import { sanitizeSchema, toPiToolName, expandExcludes } from "./schema.js";
 import { spawnSema } from "../sema.js";
+import { toolText, toolError } from "../tool-result.js";
 
 const CALL_TIMEOUT_MS = 120_000;
 
 /** Per-tool prompt hints for the noisier default tools. */
 const PROMPT_SNIPPETS: Record<string, string> = {
   eval: "Evaluate Sema code in the shared live environment (deftool definitions persist)",
-  run_file: "Run a .sema file",
+  run_file: "Run a .sema file in an isolated subprocess",
   docs_search: "Search the Sema language/stdlib documentation",
   fmt: "Format Sema source",
   check: "Statically check Sema source",
 };
 
-/**
- * Bridges the long-lived `sema mcp` server into pi: every MCP tool becomes a
- * native `sema_*` pi tool, and the live tools/list recompute (verified: the
- * list is rebuilt from the server env on every call) makes forged deftools
- * appear without any restart.
- */
+// Bridges the long-lived `sema mcp` server into pi: every MCP tool becomes a
+// native `sema_*` pi tool. `sema mcp` rebuilds its tools/list from the live env
+// on every call, so forged deftools appear without any restart.
 export class SemaBridge {
   private process: McpProcess | null = null;
   /** mcpName → piName for everything we've registered. */
@@ -74,10 +87,7 @@ export class SemaBridge {
           `registered tools: ${bridge.registered.size} (${[...bridge.registered.values()].join(", ") || "none"})`,
           `excluded: ${[...bridge.excluded].join(", ") || "none"}`,
         ];
-        return {
-          content: [{ type: "text", text: lines.join("\n") }],
-          details: {},
-        };
+        return toolText(lines.join("\n"));
       },
     });
   }
@@ -172,7 +182,7 @@ export class SemaBridge {
         tool.description ??
         "Run a .sema file in an isolated subprocess (survives bridge crashes; safe for LLM-heavy scripts).",
       parameters: runFileSchema(),
-      promptSnippet: "Run a .sema file in an isolated subprocess",
+      promptSnippet: PROMPT_SNIPPETS.run_file,
       async execute(_id, params, signal): Promise<AgentToolResult<unknown>> {
         const p = params as { file_path: string; arguments?: string[] };
         // Sandbox parity with the bridge: the top-level --sandbox flag uses
@@ -192,18 +202,11 @@ export class SemaBridge {
           .filter(Boolean)
           .join("\n--- stderr ---\n");
         if (result.killed) {
-          return {
-            content: [
-              { type: "text", text: `${text}\n(killed: timeout or abort)` },
-            ],
-            details: { isError: true },
-          };
+          return toolError(`${text}\n(killed: timeout or abort)`);
         }
-        return {
-          content: [{ type: "text", text: text || "(no output)" }],
-          details:
-            result.code === 0 ? {} : { isError: true, exitCode: result.code },
-        };
+        return result.code === 0
+          ? toolText(text || "(no output)")
+          : toolError(text || "(no output)", { exitCode: result.code });
       },
     });
   }
@@ -234,15 +237,9 @@ export class SemaBridge {
         signal,
       ): Promise<AgentToolResult<unknown>> {
         if (!bridge.process?.running) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "sema mcp bridge is not running (binary missing or crashed)",
-              },
-            ],
-            details: { isError: true },
-          };
+          return toolError(
+            "sema mcp bridge is not running (binary missing or crashed)",
+          );
         }
         const call = mcpCallTool(
           bridge.process.client,
@@ -252,10 +249,7 @@ export class SemaBridge {
         );
         const result = await raceAbort(call, signal);
         if (result === ABORTED) {
-          return {
-            content: [{ type: "text", text: "aborted" }],
-            details: { isError: true },
-          };
+          return toolError("aborted");
         }
 
         // Self-extension fast path: evals that define tools re-sync the registry
@@ -268,16 +262,10 @@ export class SemaBridge {
           bridge.refresh().catch(() => {});
         }
 
-        const text = result.content
-          .map((block) =>
-            block.type === "text" ? (block.text ?? "") : `[${block.type}]`,
-          )
-          .join("\n")
-          .trim();
-        return {
-          content: [{ type: "text", text: text || "(no output)" }],
-          details: result.isError ? { isError: true } : {},
-        };
+        const text = contentToText(result.content);
+        return result.isError
+          ? toolError(text || "(no output)")
+          : toolText(text || "(no output)");
       },
     });
   }

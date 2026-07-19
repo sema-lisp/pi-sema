@@ -1,3 +1,14 @@
+/**
+ * The library store — persistence for user/agent-authored Sema artifacts.
+ *
+ * WHAT: reads and writes tools, workflows, and agents as `.sema` files across a
+ * project tier (<cwd>/.pi/pi-sema) and a global tier (~/.pi/agent/pi-sema).
+ *
+ * HOW/WHY: the three kinds are kept in separate directories and never
+ * conflated; project shadows global by logical name so a repo can override a
+ * global artifact. Directories are created lazily on first write so merely
+ * loading the extension never scatters dot-dirs into a repo.
+ */
 import {
   readdirSync,
   readFileSync,

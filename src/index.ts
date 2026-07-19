@@ -1,3 +1,15 @@
+/**
+ * pi-sema extension entrypoint.
+ *
+ * WHAT: the default export is the extension factory pi calls once at load. It
+ * registers config flags, tools, commands, hooks, and the dashboard, and owns
+ * the per-session `runtime` (config + library store + MCP bridge).
+ *
+ * HOW/WHY: `runtime` is (re)built on every `session_start` rather than at load
+ * time so a new cwd or edited config is always honored; everything downstream
+ * reaches it through the `getRuntime()` closure instead of a module global, so
+ * there is no stale state to reset between sessions.
+ */
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { isSemaInstalled, semaVersion, spawnSema } from "./sema.js";
 import {
@@ -8,7 +20,6 @@ import {
 import { LibraryStore } from "./library/store.js";
 import { SemaBridge } from "./bridge/bridge.js";
 import { registerContextHooks } from "./hooks/context.js";
-import { registerResourceHooks } from "./hooks/resources.js";
 import { registerCommands } from "./commands.js";
 import { registerForgeTool } from "./forge/forge.js";
 import { registerWorkflowRunTool } from "./workflows/runner.js";
@@ -29,7 +40,10 @@ export default function (pi: ExtensionAPI) {
   const getRuntime = () => runtime;
 
   pi.on("session_start", async (_event, ctx) => {
+    // Probe sandbox support up front so it overlaps the install/version checks.
+    const sandboxSupported = mcpSandboxSupported();
     if (!(await isSemaInstalled())) {
+      void sandboxSupported.catch(() => {});
       ctx.ui.notify(
         "sema binary not found on PATH. Install: curl -fsSL https://sema-lang.com/install.sh | sh",
         "warning",
@@ -47,7 +61,7 @@ export default function (pi: ExtensionAPI) {
     runtime = { cfg, store, bridge };
 
     try {
-      await bridge.start(ctx.cwd, await mcpSandboxSupported());
+      await bridge.start(ctx.cwd, await sandboxSupported);
     } catch (err) {
       ctx.ui.notify(
         `pi-sema: MCP bridge failed to start: ${err instanceof Error ? err.message : err}`,
@@ -67,7 +81,6 @@ export default function (pi: ExtensionAPI) {
   registerWorkflowAuthoring(pi, getRuntime);
   registerDashboard(pi, getRuntime);
   registerContextHooks(pi);
-  registerResourceHooks(pi);
 }
 
 let sandboxSupportCache: boolean | undefined;

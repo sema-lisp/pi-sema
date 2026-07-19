@@ -1,3 +1,16 @@
+/**
+ * The forge subsystem — the agent (or /sema:forge) authors persistent tools.
+ *
+ * WHAT: registers `create_sema_tool`, which turns a `(deftool …)` source into a
+ * stored, live-registered pi tool. Companions: probe.ts (sandboxed verify),
+ * prompts.ts (model-facing guidance).
+ *
+ * HOW/WHY: the pipeline is generate → verify → approve → store → inject →
+ * register. Verification alone runs under `--sandbox strict --no-llm` to catch
+ * bad source safely; real execution is unsandboxed, so the human approval
+ * dialog is the gate. On success the deftool is eval'd into the live server and
+ * the bridge re-syncs, making it callable on the very next turn.
+ */
 import { Type } from "typebox";
 import { existsSync } from "node:fs";
 import type {
@@ -7,6 +20,10 @@ import type {
 import type { PiSemaRuntime } from "../index.js";
 import { sanitizeName } from "../library/store.js";
 import type { TierName } from "../paths.js";
+import { toPiToolName } from "../bridge/schema.js";
+import { contentToText } from "../bridge/jsonrpc.js";
+import { toolText, toolError } from "../tool-result.js";
+import { extractSingleFormName } from "../util.js";
 import { verifyToolSource, describeProbeFailure } from "./probe.js";
 import { CREATE_TOOL_DESCRIPTION, CREATE_TOOL_GUIDELINES } from "./prompts.js";
 
@@ -56,7 +73,7 @@ export function registerForgeTool(
     ): Promise<AgentToolResult<Details>> {
       const runtime = getRuntime();
       if (!runtime) {
-        return fail("pi-sema is not initialized (sema binary missing?)");
+        return toolError("pi-sema is not initialized (sema binary missing?)");
       }
       const { cfg, store, bridge } = runtime;
 
@@ -64,16 +81,16 @@ export function registerForgeTool(
       try {
         name = sanitizeName(p.name);
       } catch (err) {
-        return fail(String(err instanceof Error ? err.message : err));
+        return toolError(String(err instanceof Error ? err.message : err));
       }
       const deftoolName = extractDeftoolName(p.source);
       if (!deftoolName) {
-        return fail(
+        return toolError(
           'source must contain exactly one (deftool <name> "description" {params} (lambda …)) form',
         );
       }
       if (deftoolName !== name.split("/").pop() && deftoolName !== name) {
-        return fail(
+        return toolError(
           `declared name "${name}" does not match the deftool form's name "${deftoolName}" — make them agree`,
         );
       }
@@ -93,11 +110,11 @@ export function registerForgeTool(
         rounds.set(name, round);
         if (round >= cfg.forge.maxRounds) {
           rounds.delete(name);
-          return fail(
+          return toolError(
             `status: gave_up after ${round} rounds.\nLast error:\n${describeProbeFailure(probe)}\nStop retrying and tell the user what failed; ask how they'd like to proceed.`,
           );
         }
-        return fail(
+        return toolError(
           `status: probe_failed (round ${round}/${cfg.forge.maxRounds})\n${describeProbeFailure(probe)}\nFix the source and call create_sema_tool again.`,
         );
       }
@@ -110,7 +127,7 @@ export function registerForgeTool(
         );
         if (!approved) {
           rounds.delete(name);
-          return fail(
+          return toolError(
             "status: declined — the user rejected this tool. Do not resubmit unchanged; ask them what to change.",
           );
         }
@@ -140,12 +157,12 @@ export function registerForgeTool(
         content: [{ type: "text", text: "injecting into live environment…" }],
         details: { stage: "inject" },
       });
-      let piName = `sema_${deftoolName.replace(/[^a-zA-Z0-9_]/g, "_")}`;
+      let piName = toPiToolName(deftoolName);
       if (bridge.running) {
         const injected = await bridge.injectSource(p.source);
         if (injected.isError) {
-          const text = injected.content.map((c) => c.text ?? "").join("\n");
-          return fail(
+          const text = contentToText(injected.content);
+          return toolError(
             `stored to ${path}, but live injection failed: ${text}\nIt will load on next session start.`,
           );
         }
@@ -157,30 +174,17 @@ export function registerForgeTool(
       pi.appendEntry("sema:forge", { name, tier, path, piName });
       rounds.delete(name);
 
-      return {
-        content: [
-          {
-            type: "text",
-            text:
-              `status: ${existed ? "updated (overwrote existing definition; live env re-injected)" : "created"}\n` +
-              `Stored: ${path} (${tier} tier)\n` +
-              `Registered as pi tool: ${piName} — callable directly from your NEXT turn.\n` +
-              `To exercise it THIS turn, call sema_eval with (${deftoolName} …args) — the definition is already live.`,
-          },
-        ],
-        details: {},
-      };
+      return toolText(
+        `status: ${existed ? "updated (overwrote existing definition; live env re-injected)" : "created"}\n` +
+          `Stored: ${path} (${tier} tier)\n` +
+          `Registered as pi tool: ${piName} — callable directly from your NEXT turn.\n` +
+          `To exercise it THIS turn, call sema_eval with (${deftoolName} …args) — the definition is already live.`,
+      );
     },
   });
 }
 
-function fail(text: string): AgentToolResult<Details> {
-  return { content: [{ type: "text", text }], details: { isError: true } };
-}
-
 /** Extract the tool name from the (single) deftool form; null when absent/ambiguous. */
 export function extractDeftoolName(source: string): string | null {
-  const matches = [...source.matchAll(/\(deftool\s+([^\s()]+)/g)];
-  if (matches.length !== 1) return null;
-  return matches[0][1];
+  return extractSingleFormName(source, "deftool");
 }

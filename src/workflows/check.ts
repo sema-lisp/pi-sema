@@ -1,4 +1,5 @@
 import { spawnSema } from "../sema.js";
+import { formatLineCol, tryParseJson } from "../util.js";
 
 export interface WorkflowDiagnostic {
   severity: "error" | "warning";
@@ -34,12 +35,9 @@ export async function workflowCheck(
     },
   );
 
-  let parsed: { diagnostics?: WorkflowDiagnostic[] } | null = null;
-  try {
-    parsed = JSON.parse(result.stdout);
-  } catch {
-    // fall through
-  }
+  const parsed = tryParseJson<{ diagnostics?: WorkflowDiagnostic[] }>(
+    result.stdout,
+  );
   if (!parsed || !Array.isArray(parsed.diagnostics)) {
     return {
       ok: false,
@@ -62,12 +60,8 @@ export async function workflowCheck(
 export function formatDiagnostics(diags: WorkflowDiagnostic[]): string {
   return diags
     .map((d) => {
-      const loc =
-        d.line != null
-          ? ` (line ${d.line}${d.col != null ? `:${d.col}` : ""})`
-          : "";
       const hint = d.hint ? `\n  hint: ${d.hint}` : "";
-      return `[${d.code}] ${d.message}${loc}${hint}`;
+      return `[${d.code}] ${d.message}${formatLineCol(d.line, d.col)}${hint}`;
     })
     .join("\n");
 }

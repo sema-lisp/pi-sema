@@ -1,23 +1,42 @@
-import { readdirSync, statSync, readFileSync, existsSync } from "node:fs";
+/**
+ * The workflow dashboard — a TUI overlay listing runs and their live status.
+ *
+ * WHAT: registers /sema:workflows + a shortcut, and the two-view (list ⇄
+ * detail) overlay component that reads runs from the run root on disk.
+ *
+ * HOW/WHY: historical runs are folded once from their journal; a JournalTailer
+ * follows only the selected live run and is stopped on close. The overlay is
+ * rebuilt from disk on every open because pi disposes overlay components when
+ * they close, so there is no long-lived state to keep in sync.
+ */
+import { readdirSync, statSync, type Dirent } from "node:fs";
 import { join } from "node:path";
-import { matchesKey } from "@earendil-works/pi-tui";
+import {
+  matchesKey,
+  visibleWidth,
+  type Component,
+} from "@earendil-works/pi-tui";
 import type {
   ExtensionAPI,
   ExtensionContext,
+  Theme,
 } from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
+import { readJsonFile } from "../util.js";
 import { JournalTailer, readJournalEvents } from "../workflows/journal.js";
 import {
   foldEvents,
   newRunState,
   reduceRun,
+  type JournalEvent,
   type RunState,
 } from "../workflows/model.js";
 import { formatRunLines, formatRunSummary, formatMs } from "./format.js";
 import { defaultRunRoot } from "../workflows/runner.js";
 import { DEFAULT_CONFIG } from "../config.js";
+import { fitRow, sanitizeDisplayText } from "./text.js";
 
-interface RunListing {
+export interface RunListing {
   runId: string;
   dir: string;
   mtimeMs: number;
@@ -25,33 +44,84 @@ interface RunListing {
   live: boolean;
 }
 
+interface CachedRunListing {
+  signature: string;
+  listing: RunListing;
+}
+
+export type RunListingCache = Map<string, CachedRunListing>;
+
 /** Scan the run root the same way GET /api/runs does: dirs with a journal, newest first. */
-export function listRuns(runRoot: string): RunListing[] {
-  let names: string[];
+export function listRuns(
+  runRoot: string,
+  cache: RunListingCache = new Map(),
+): RunListing[] {
+  let entries: Dirent<string>[];
   try {
-    names = readdirSync(runRoot);
+    entries = readdirSync(runRoot, { withFileTypes: true });
   } catch {
     return [];
   }
   const runs: RunListing[] = [];
-  for (const name of names) {
-    const dir = join(runRoot, name);
-    const journal = join(dir, "events.jsonl");
+  const seen = new Set<string>();
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue;
+    const dir = join(runRoot, entry.name);
     try {
-      const mtimeMs = statSync(journal).mtimeMs;
+      const segments = journalSegmentStats(dir);
+      if (!segments.some((segment) => segment.name === "events.jsonl")) {
+        continue;
+      }
+      const signature = segments
+        .map((segment) => `${segment.name}:${segment.size}:${segment.mtimeMs}`)
+        .join("|");
+      const cacheKey = dir;
+      seen.add(cacheKey);
+      const cached = cache.get(cacheKey);
+      if (cached?.signature === signature) {
+        runs.push(cached.listing);
+        continue;
+      }
       const state = foldEvents(readJournalEvents(dir));
-      runs.push({
-        runId: name,
+      const listing: RunListing = {
+        runId: entry.name,
         dir,
-        mtimeMs,
+        mtimeMs: Math.max(...segments.map((segment) => segment.mtimeMs)),
         state,
         live: state.status === "live",
-      });
+      };
+      cache.set(cacheKey, { signature, listing });
+      runs.push(listing);
     } catch {
       // not a run dir
     }
   }
+  for (const key of cache.keys()) {
+    if (key.startsWith(`${runRoot}/`) && !seen.has(key)) cache.delete(key);
+  }
   return runs.sort((a, b) => b.mtimeMs - a.mtimeMs);
+}
+
+function journalSegmentStats(dir: string): {
+  name: string;
+  size: number;
+  mtimeMs: number;
+}[] {
+  const names = readdirSync(dir)
+    .filter(
+      (name) =>
+        name === "events.jsonl" || /^events\.resume-\d+\.jsonl$/.test(name),
+    )
+    .sort((a, b) => segmentOrder(a) - segmentOrder(b));
+  return names.map((name) => {
+    const stat = statSync(join(dir, name));
+    return { name, size: stat.size, mtimeMs: stat.mtimeMs };
+  });
+}
+
+function segmentOrder(name: string): number {
+  if (name === "events.jsonl") return 0;
+  return Number(/^events\.resume-(\d+)\.jsonl$/.exec(name)?.[1] ?? 0) + 1;
 }
 
 export function registerDashboard(
@@ -72,8 +142,13 @@ export function registerDashboard(
       runtime?.cfg.workflows.runDir ?? null,
     );
     await ctx.ui.custom<void>(
-      (tui, _theme, _keybindings, done) =>
-        new DashboardComponent(runRoot, () => tui.requestRender(), done),
+      (tui, theme, _keybindings, done) =>
+        new DashboardComponent(runRoot, {
+          requestRender: () => tui.requestRender(),
+          done,
+          theme,
+          maxHeight: () => Math.max(6, Math.floor(tui.terminal.rows * 0.7)),
+        }),
       {
         overlay: true,
         overlayOptions: { anchor: "center", width: "80%", maxHeight: "70%" },
@@ -93,18 +168,13 @@ export function registerDashboard(
 
 /** Shortcut must be known at registration time — global config only (no cwd yet). */
 function readConfiguredShortcut(): string {
-  try {
-    const raw = readFileSync(
-      join(process.env.HOME ?? "", ".pi", "agent", "pi-sema", "config.json"),
-      "utf-8",
-    );
-    const parsed = JSON.parse(raw);
-    if (typeof parsed?.ui?.dashboardShortcut === "string")
-      return parsed.ui.dashboardShortcut;
-  } catch {
-    // fall through
-  }
-  return DEFAULT_CONFIG.ui.dashboardShortcut;
+  const parsed = readJsonFile<{ ui?: { dashboardShortcut?: unknown } }>(
+    join(process.env.HOME ?? "", ".pi", "agent", "pi-sema", "config.json"),
+  );
+  const shortcut = parsed?.ui?.dashboardShortcut;
+  return typeof shortcut === "string"
+    ? shortcut
+    : DEFAULT_CONFIG.ui.dashboardShortcut;
 }
 
 /**
@@ -112,28 +182,68 @@ function readConfiguredShortcut(): string {
  * (overlay components are disposed on close); a JournalTailer follows the
  * selected live run and is stopped in dispose().
  */
-class DashboardComponent {
+export interface DashboardTailer {
+  start(): void;
+  stop(): void;
+}
+
+export interface DashboardOptions {
+  requestRender(): void;
+  done(): void;
+  theme: Theme;
+  maxHeight(): number;
+  refreshMs?: number | false;
+  now?: () => number;
+  tailerFactory?: (
+    onEvents: (events: JournalEvent[]) => void,
+    runDir: string,
+  ) => DashboardTailer;
+}
+
+interface DashboardRow {
+  text: string;
+  selected?: boolean;
+}
+
+export class DashboardComponent implements Component {
   private runs: RunListing[] = [];
   private selected = 0;
   private view: "list" | "detail" = "list";
-  private tailer: JournalTailer | null = null;
+  private tailer: DashboardTailer | null = null;
   private detailState: RunState | null = null;
+  private detailResult: unknown | undefined;
   private refreshTimer: NodeJS.Timeout | null = null;
+  private readonly runCache: RunListingCache = new Map();
+  private listOffset = 0;
+  private detailOffset = 0;
+  private detailFollow = false;
+  private detailRowCount = 0;
+  private lastBodyHeight = 1;
 
   constructor(
     private readonly runRoot: string,
-    private readonly requestRender: () => void,
-    private readonly done: (result: void) => void,
+    private readonly options: DashboardOptions,
   ) {
     this.reload();
-    // The list view re-scans periodically so live runs move/update.
-    this.refreshTimer = setInterval(() => {
-      if (this.view === "list") {
-        this.reload();
-        this.requestRender();
-      }
-    }, 2000);
-    this.refreshTimer.unref?.();
+    const refreshMs =
+      options.refreshMs === undefined ? 2000 : options.refreshMs;
+    if (refreshMs !== false) {
+      this.refreshTimer = setInterval(() => {
+        if (this.view === "list") {
+          this.reload();
+          this.options.requestRender();
+        } else if (
+          this.detailState?.status !== "live" &&
+          this.detailResult === undefined
+        ) {
+          const run = this.runs[this.selected];
+          if (run && this.loadDetailResult(run)) {
+            this.options.requestRender();
+          }
+        }
+      }, refreshMs);
+      this.refreshTimer.unref?.();
+    }
   }
 
   dispose(): void {
@@ -146,7 +256,7 @@ class DashboardComponent {
 
   private reload(): void {
     const prev = this.runs[this.selected]?.runId;
-    this.runs = listRuns(this.runRoot);
+    this.runs = listRuns(this.runRoot, this.runCache);
     if (prev) {
       const idx = this.runs.findIndex((r) => r.runId === prev);
       if (idx >= 0) this.selected = idx;
@@ -159,23 +269,39 @@ class DashboardComponent {
     if (!run) return;
     this.view = "detail";
     this.detailState = foldEvents(readJournalEvents(run.dir));
+    run.state = this.detailState;
+    run.live = this.detailState.status === "live";
+    this.detailResult = undefined;
+    if (!run.live) this.loadDetailResult(run);
+    this.detailOffset = 0;
+    this.detailFollow = run.live;
     if (run.live) {
       // Live: attach a fresh tailer folding from scratch so detail stays current.
       const state = newRunState();
-      const tailer = new JournalTailer(run.dir, { pollMs: 1000 });
-      tailer.on((events) => {
+      const onEvents = (events: JournalEvent[]) => {
         for (const ev of events) reduceRun(state, ev);
         this.detailState = state;
-        this.requestRender();
-      });
-      tailer.start();
+        run.state = state;
+        run.live = state.status === "live";
+        if (!run.live) {
+          this.loadDetailResult(run);
+          this.detailFollow = true;
+          this.stopTail();
+        }
+        this.options.requestRender();
+      };
+      const tailer = this.options.tailerFactory
+        ? this.options.tailerFactory(onEvents, run.dir)
+        : createJournalTailer(run.dir, onEvents);
       this.tailer = tailer;
+      tailer.start();
     }
   }
 
   private stopTail(): void {
-    this.tailer?.stop();
+    const tailer = this.tailer;
     this.tailer = null;
+    tailer?.stop();
   }
 
   handleInput(data: string): void {
@@ -183,9 +309,10 @@ class DashboardComponent {
       if (this.view === "detail") {
         this.stopTail();
         this.view = "list";
-        this.requestRender();
+        this.reload();
+        this.options.requestRender();
       } else {
-        this.done();
+        this.options.done();
       }
       return;
     }
@@ -200,14 +327,43 @@ class DashboardComponent {
       } else if (matchesKey(data, "enter")) {
         this.openDetail();
       } else if (data === "q") {
-        this.done();
+        this.options.done();
       }
-      this.requestRender();
+      this.options.requestRender();
     } else if (this.view === "detail") {
       if (data === "q") {
         this.stopTail();
-        this.done();
+        this.options.done();
+        return;
       }
+      if (data === "G" || matchesKey(data, "end")) {
+        this.detailFollow = true;
+      } else if (data === "g" || matchesKey(data, "home")) {
+        this.detailFollow = false;
+        this.detailOffset = 0;
+      } else if (matchesKey(data, "down") || data === "j") {
+        this.detailFollow = false;
+        this.detailOffset = Math.min(
+          this.detailOffset + 1,
+          this.maxDetailOffset(),
+        );
+      } else if (matchesKey(data, "up") || data === "k") {
+        this.detailFollow = false;
+        this.detailOffset = Math.max(0, this.detailOffset - 1);
+      } else if (matchesKey(data, "pageDown")) {
+        this.detailFollow = false;
+        this.detailOffset = Math.min(
+          this.detailOffset + this.lastBodyHeight,
+          this.maxDetailOffset(),
+        );
+      } else if (matchesKey(data, "pageUp")) {
+        this.detailFollow = false;
+        this.detailOffset = Math.max(
+          0,
+          this.detailOffset - this.lastBodyHeight,
+        );
+      }
+      this.options.requestRender();
     }
   }
 
@@ -218,58 +374,153 @@ class DashboardComponent {
   }
 
   private renderList(width: number): string[] {
-    const lines: string[] = [
-      "Sema workflow runs — ↑/↓ select · enter details · esc close",
-      "",
-    ];
-    if (this.runs.length === 0) {
-      lines.push(`(no runs under ${this.runRoot})`);
-      return lines.map((l) => clip(l, width));
+    const bodyHeight = this.bodyHeight();
+    this.lastBodyHeight = bodyHeight;
+    if (this.selected < this.listOffset) this.listOffset = this.selected;
+    if (this.selected >= this.listOffset + bodyHeight) {
+      this.listOffset = this.selected - bodyHeight + 1;
     }
-    this.runs.forEach((run, i) => {
-      const cursor = i === this.selected ? "▸ " : "  ";
-      const when = formatAge(Date.now() - run.mtimeMs);
-      lines.push(
-        `${cursor}${formatRunSummary(run.state)} · ${run.runId} · ${when}`,
-      );
-    });
-    return lines.map((l) => clip(l, width));
+    const visible = this.runs.slice(
+      this.listOffset,
+      this.listOffset + bodyHeight,
+    );
+    const rows: DashboardRow[] =
+      visible.length === 0
+        ? [
+            {
+              text: `(no runs under ${sanitizeDisplayText(this.runRoot)})`,
+            },
+          ]
+        : visible.map((run, index) => {
+            const absolute = this.listOffset + index;
+            const cursor = absolute === this.selected ? "▸ " : "  ";
+            const when = formatAge(
+              (this.options.now?.() ?? Date.now()) - run.mtimeMs,
+            );
+            return {
+              text: `${cursor}${formatRunSummary(run.state)} · ${sanitizeDisplayText(run.runId)} · ${when}`,
+              selected: absolute === this.selected,
+            };
+          });
+    const start = this.runs.length === 0 ? 0 : this.listOffset + 1;
+    const end = Math.min(this.listOffset + visible.length, this.runs.length);
+    return this.frame(
+      `Sema workflow runs (${this.runs.length})`,
+      rows,
+      `${start}-${end} of ${this.runs.length} · ↑/↓ select · enter details · esc close`,
+      width,
+      bodyHeight,
+    );
   }
 
   private renderDetail(width: number): string[] {
     const run = this.runs[this.selected];
     const state = this.detailState;
-    if (!run || !state) return ["(no run selected)"];
-    const lines = [
-      `Run ${run.runId} — esc back · q close${run.live ? " · LIVE" : ""}`,
-      "",
-      ...formatRunLines(state, { maxAgents: 12 }),
-    ];
+    if (!run || !state) return [fitRow("(no run selected)", width)];
+    const bodyHeight = this.bodyHeight();
+    this.lastBodyHeight = bodyHeight;
+    const lines = formatRunLines(state, { maxAgents: 12 });
     if (state.checkpoints.length > 0) {
       lines.push("", "Checkpoints:");
       for (const cp of state.checkpoints.slice(-8)) {
-        lines.push(`  :${cp.key}${cp.value ? ` = ${clip(cp.value, 60)}` : ""}`);
+        const key = sanitizeDisplayText(cp.key);
+        const value = sanitizeDisplayText(cp.value);
+        lines.push(`  :${key}${value ? ` = ${value}` : ""}`);
       }
     }
     if (state.durMs != null)
       lines.push("", `Duration: ${formatMs(state.durMs)}`);
-    const resultPath = join(run.dir, "result.json");
-    if (!run.live && existsSync(resultPath)) {
-      try {
-        const value = JSON.parse(readFileSync(resultPath, "utf-8"));
-        lines.push(`Result: ${clip(JSON.stringify(value), width - 10)}`);
-      } catch {
-        // unreadable result — journal view stands alone
+    if (state.status !== "live" && this.detailResult !== undefined) {
+      const value = JSON.stringify(this.detailResult);
+      if (value !== undefined) {
+        lines.push(`Result: ${sanitizeDisplayText(value)}`);
       }
     }
-    return lines.map((l) => clip(l, width));
+    this.detailRowCount = lines.length;
+    if (this.detailFollow) this.detailOffset = this.maxDetailOffset();
+    else
+      this.detailOffset = Math.min(this.detailOffset, this.maxDetailOffset());
+    const visible = lines
+      .slice(this.detailOffset, this.detailOffset + bodyHeight)
+      .map((text) => ({ text }));
+    const start = lines.length === 0 ? 0 : this.detailOffset + 1;
+    const end = Math.min(this.detailOffset + visible.length, lines.length);
+    return this.frame(
+      `Run ${sanitizeDisplayText(run.runId)}${state.status === "live" ? " · LIVE" : ` · ${state.status}`}`,
+      visible,
+      `${start}-${end} of ${lines.length} · ↑/↓ scroll · PgUp/PgDn · esc back`,
+      width,
+      bodyHeight,
+    );
+  }
+
+  private bodyHeight(): number {
+    return Math.max(1, Math.floor(this.options.maxHeight()) - 3);
+  }
+
+  private maxDetailOffset(): number {
+    return Math.max(0, this.detailRowCount - this.lastBodyHeight);
+  }
+
+  private loadDetailResult(run: RunListing): boolean {
+    const value = readJsonFile(join(run.dir, "result.json"));
+    if (value === null) return false;
+    this.detailResult = value;
+    return true;
+  }
+
+  private frame(
+    title: string,
+    rows: DashboardRow[],
+    footer: string,
+    width: number,
+    bodyHeight: number,
+  ): string[] {
+    if (width < 4) return [fitRow(sanitizeDisplayText(title), width)];
+    const innerWidth = width - 2;
+    const cleanTitle = fitRow(` ${sanitizeDisplayText(title)} `, innerWidth);
+    const titleFill = "─".repeat(
+      Math.max(0, innerWidth - visibleWidth(cleanTitle)),
+    );
+    const top = this.options.theme.fg(
+      "borderAccent",
+      `╭${cleanTitle}${titleFill}╮`,
+    );
+    const body = rows.slice(0, bodyHeight).map((row) => {
+      const fitted = fitRow(row.text, innerWidth, true);
+      const styled = row.selected
+        ? this.options.theme.bg(
+            "selectedBg",
+            this.options.theme.fg("text", fitted),
+          )
+        : this.options.theme.fg("text", fitted);
+      return `${this.options.theme.fg("border", "│")}${styled}${this.options.theme.fg("border", "│")}`;
+    });
+    while (body.length < bodyHeight) {
+      body.push(
+        `${this.options.theme.fg("border", "│")}${" ".repeat(innerWidth)}${this.options.theme.fg("border", "│")}`,
+      );
+    }
+    const footerText = this.options.theme.fg(
+      "muted",
+      fitRow(sanitizeDisplayText(footer), innerWidth, true),
+    );
+    const footerRow = `${this.options.theme.fg("border", "│")}${footerText}${this.options.theme.fg("border", "│")}`;
+    const bottom = this.options.theme.fg(
+      "borderAccent",
+      `╰${"─".repeat(innerWidth)}╯`,
+    );
+    return [top, ...body, footerRow, bottom].map((line) => fitRow(line, width));
   }
 }
 
-function clip(line: string, width: number): string {
-  return line.length > width
-    ? line.slice(0, Math.max(0, width - 1)) + "…"
-    : line;
+function createJournalTailer(
+  runDir: string,
+  onEvents: (events: JournalEvent[]) => void,
+): DashboardTailer {
+  const tailer = new JournalTailer(runDir, { pollMs: 1000 });
+  tailer.on(onEvents);
+  return tailer;
 }
 
 function formatAge(ms: number): string {

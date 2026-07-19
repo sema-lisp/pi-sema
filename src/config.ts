@@ -1,3 +1,13 @@
+/**
+ * Configuration — the effective `PiSemaConfig` for a session.
+ *
+ * WHAT: defines the config shape + defaults and resolves the layered value.
+ *
+ * HOW/WHY: layering is defaults ← global config.json ← project config.json ←
+ * CLI flags, deep-merged in that order so the most specific source wins.
+ * Loading never throws — a malformed config file warns and is skipped rather
+ * than taking the whole extension down at session start.
+ */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";

@@ -181,11 +181,9 @@ export function foldEvents(
 
 /** Most recently started phase still marked running, else last started. */
 function currentPhase(state: RunState): PhaseState | undefined {
-  const running = [...state.phases]
-    .reverse()
-    .find((p) => p.status === "running");
   return (
-    running ?? [...state.phases].reverse().find((p) => p.seq !== undefined)
+    state.phases.findLast((p) => p.status === "running") ??
+    state.phases.findLast((p) => p.seq !== undefined)
   );
 }
 

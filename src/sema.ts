@@ -1,3 +1,14 @@
+/**
+ * The `sema` binary interface — every child-process call goes through here.
+ *
+ * WHAT: `spawnSema` runs `sema <args>` to completion; plus cached probes
+ * (`semaVersion`, `isSemaInstalled`) and a bounded `.sema`-file scan.
+ *
+ * HOW/WHY: timeout and abort are enforced here in Node because sema's own
+ * `--timeout` flag is a parsed no-op — so this wrapper is load-bearing for
+ * every LLM-heavy or possibly-hanging call. Version and file-scan results are
+ * memoized so hot paths (per-turn hooks) do no repeated spawns or disk walks.
+ */
 import { spawn } from "node:child_process";
 import { readdirSync } from "node:fs";
 import { join } from "node:path";

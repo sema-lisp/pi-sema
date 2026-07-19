@@ -1,10 +1,10 @@
 import type { TSchema } from "typebox";
 
-/**
- * Sema's MCP inputSchema is already JSON Schema, and pi's ToolDefinition
- * `parameters: TSchema` is structurally plain JSON Schema at runtime — so we
- * pass through with light normalization instead of rebuilding via TypeBox.
- */
+/** pi tool-name prefix for every bridged/forged sema tool (never shadows pi built-ins). */
+export const SEMA_TOOL_PREFIX = "sema_";
+
+// Sema's MCP inputSchema is already JSON Schema and pi's `parameters: TSchema`
+// is plain JSON Schema at runtime, so normalize in place rather than rebuild.
 export function sanitizeSchema(input: unknown): TSchema {
   const schema: Record<string, unknown> =
     input && typeof input === "object"
@@ -27,13 +27,9 @@ export function sanitizeSchema(input: unknown): TSchema {
   return schema as unknown as TSchema;
 }
 
-/**
- * Providers validate tool schemas against JSON Schema draft 2020-12 and reject
- * the WHOLE request on any invalid type name — one bad forged tool would kill
- * every turn. Sema's deftool type keywords leak through verbatim (`:list` →
- * "list"), so map the common aliases and strip anything unrecognized
- * (schema-less params are valid; wrong type names are not).
- */
+// Providers reject the whole request on any invalid JSON-Schema type name, so
+// one bad forged tool would kill every turn. Sema's deftool type keywords leak
+// through verbatim (`:list` → "list") — map known aliases, strip the rest.
 const TYPE_ALIASES: Record<string, string> = {
   string: "string",
   str: "string",
@@ -73,14 +69,10 @@ function normalizeProperty(prop: unknown): unknown {
   return out;
 }
 
-/**
- * Map an MCP tool name to a pi tool name: `sema_` prefix + [a-zA-Z0-9_].
- * The prefix guarantees we never shadow pi built-ins (extension tools override
- * built-ins of the same name) and namespaces forged tools (Amp's tb__ lesson).
- */
+/** Map an MCP tool name to a pi tool name: `sema_` prefix + [a-zA-Z0-9_], collision-deduped. */
 export function toPiToolName(mcpName: string, taken?: Set<string>): string {
   const base =
-    "sema_" +
+    SEMA_TOOL_PREFIX +
     mcpName
       .replace(/[^a-zA-Z0-9_]/g, "_")
       .replace(/_+/g, "_")

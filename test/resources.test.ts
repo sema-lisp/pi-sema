@@ -25,12 +25,16 @@ describe("packaged skills", () => {
   });
 
   it("every skill has name + description frontmatter and a SKILL.md", () => {
-    for (const dir of readdirSync(join(ROOT, "skills"))) {
-      const fm = frontmatter(join(ROOT, "skills", dir, "SKILL.md"));
-      expect(fm.name, `${dir} name`).toBe(dir);
-      expect(fm.description?.length ?? 0, `${dir} description`).toBeGreaterThan(
-        40,
-      );
+    const dirs = readdirSync(join(ROOT, "skills"), {
+      withFileTypes: true,
+    }).filter((entry) => entry.isDirectory());
+    for (const dir of dirs) {
+      const fm = frontmatter(join(ROOT, "skills", dir.name, "SKILL.md"));
+      expect(fm.name, `${dir.name} name`).toBe(dir.name);
+      expect(
+        fm.description?.length ?? 0,
+        `${dir.name} description`,
+      ).toBeGreaterThan(40);
     }
   });
 });
@@ -42,8 +46,8 @@ describe("packaged prompt templates", () => {
   });
 
   it("every template has a description and substitutes arguments", () => {
-    const files = readdirSync(join(ROOT, "prompts")).filter((f) =>
-      f.endsWith(".md"),
+    const files = readdirSync(join(ROOT, "prompts")).filter(
+      (file) => file.endsWith(".md") && file !== "README.md",
     );
     expect(files.length).toBeGreaterThan(0);
     for (const file of files) {

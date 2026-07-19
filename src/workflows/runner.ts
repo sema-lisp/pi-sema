@@ -1,17 +1,40 @@
+/**
+ * Workflow execution — runs a stored workflow with live status.
+ *
+ * WHAT: registers `sema_workflow_run`, which shells out to `sema workflow run`
+ * and streams progress. Companions: journal.ts (tail the run's event log),
+ * model.ts (fold events → RunState), ../ui/format.ts (render), author.ts
+ * (the separate authoring flow).
+ *
+ * HOW/WHY: the sema process is the source of truth; we observe it by tailing
+ * its journal rather than parsing stdout, which is what makes runs resumable —
+ * `resume=<run_id>` replays memoized steps for free. Authoring and running are
+ * deliberately separate tools so all live-status logic lives here alone.
+ */
 import { Type } from "typebox";
-import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
 import type {
   ExtensionAPI,
   AgentToolResult,
-  ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import type { PiSemaRuntime } from "../index.js";
 import { spawnSema } from "../sema.js";
+import { readJsonFile } from "../util.js";
+import { toolText, toolError } from "../tool-result.js";
 import { JournalTailer } from "./journal.js";
 import { newRunState, reduceRun, type RunState } from "./model.js";
-import { formatRunLines } from "../ui/format.js";
+import { formatRunLines, formatRunSummary } from "../ui/format.js";
+import {
+  toWorkflowRunDetails,
+  type WorkflowToolDetails,
+} from "../ui/workflow-view.js";
+import {
+  renderWorkflowCall,
+  renderWorkflowResult,
+} from "../ui/workflow-tool.js";
+import { installWorkflowRunWidget } from "../ui/workflow-widget.js";
+import { sanitizeDisplayText } from "../ui/text.js";
 
 const params = Type.Object({
   workflow: Type.String({
@@ -90,14 +113,8 @@ export async function runWorkflow(opts: {
     });
     tailer.drain(); // pick up the final lines before stopping
 
-    let resultJson: unknown;
-    try {
-      resultJson = JSON.parse(
-        readFileSync(join(runDir, "result.json"), "utf-8"),
-      );
-    } catch {
-      // no result.json (crash / kill) — journal state is the source of truth
-    }
+    // No result.json (crash / kill) — journal state is the source of truth.
+    const resultJson = readJsonFile(join(runDir, "result.json")) ?? undefined;
     if (proc.killed && state.status === "live") state.status = "failed";
     return { runId, runDir, state, exitCode: proc.code, resultJson };
   } finally {
@@ -117,103 +134,81 @@ export function registerWorkflowRunTool(
     promptSnippet:
       "Run a stored Sema workflow (journaled, resumable, live status)",
     parameters: params,
+    renderCall: renderWorkflowCall,
+    renderResult: renderWorkflowResult,
     async execute(
-      _id,
+      id,
       p,
       signal,
       onUpdate,
       ctx,
-    ): Promise<AgentToolResult<{ isError?: boolean; runId?: string }>> {
+    ): Promise<AgentToolResult<WorkflowToolDetails>> {
       const runtime = getRuntime();
       if (!runtime) {
-        return {
-          content: [{ type: "text", text: "pi-sema is not initialized" }],
-          details: { isError: true },
-        };
+        return toolError<WorkflowToolDetails>("pi-sema is not initialized");
       }
       const entry = runtime.store.resolve("workflows", p.workflow);
       if (!entry) {
         const known = runtime.store.list("workflows").map((e) => e.name);
-        return {
-          content: [
-            {
-              type: "text",
-              text: `unknown workflow "${p.workflow}". Known: ${known.join(", ") || "(none)"}`,
-            },
-          ],
-          details: { isError: true },
-        };
+        return toolError<WorkflowToolDetails>(
+          `unknown workflow "${p.workflow}". Known: ${known.join(", ") || "(none)"}`,
+        );
       }
 
       const runRoot = defaultRunRoot(ctx.cwd, runtime.cfg.workflows.runDir);
-      const widgetKey = "sema-run";
-      const outcome = await runWorkflow({
-        file: entry.path,
-        args: p.args ?? {},
-        runRoot,
-        resume: p.resume,
-        cwd: ctx.cwd,
-        signal,
-        onState: (state) => {
-          const lines = formatRunLines(state);
-          onUpdate?.({
-            content: [{ type: "text", text: lines.join("\n") }],
-            details: { runId: state.runId },
-          });
-          setWidgetSafe(ctx, widgetKey, lines);
-        },
-      });
-
-      setWidgetSafe(ctx, widgetKey, undefined);
-      return finalResult(outcome);
+      const widget = installWorkflowRunWidget(ctx, `sema-run-${id}`);
+      try {
+        const outcome = await runWorkflow({
+          file: entry.path,
+          args: p.args ?? {},
+          runRoot,
+          resume: p.resume,
+          cwd: ctx.cwd,
+          signal,
+          onState: (state) => {
+            const run = toWorkflowRunDetails(state);
+            onUpdate?.({
+              content: [{ type: "text", text: formatRunSummary(state) }],
+              details: { runId: state.runId, run },
+            });
+            widget.update(run);
+          },
+        });
+        return finalResult(outcome);
+      } finally {
+        widget.clear();
+      }
     },
   });
 }
 
-function setWidgetSafe(
-  ctx: ExtensionContext,
-  key: string,
-  lines: string[] | undefined,
-): void {
-  try {
-    ctx.ui.setWidget(key, lines);
-  } catch {
-    // non-TUI modes may not support widgets — streaming updates still flow
-  }
-}
-
 export function finalResult(
   outcome: RunOutcome,
-): AgentToolResult<{ isError?: boolean; runId?: string }> {
+): AgentToolResult<WorkflowToolDetails> {
   const { state, runId } = outcome;
   const lines = formatRunLines(state);
-  const details: { isError?: boolean; runId?: string } = { runId };
+  const details: WorkflowToolDetails = {
+    runId,
+    run: toWorkflowRunDetails(state),
+    exitCode: outcome.exitCode,
+  };
 
   if (state.status === "needs-auth") {
     const logins = state.authRequired.map((a) =>
-      `sema mcp login ${a.server ?? ""}`.trim(),
+      `sema mcp login ${sanitizeDisplayText(a.server)}`.trim(),
     );
-    return {
-      content: [
-        {
-          type: "text",
-          text: `${lines.join("\n")}\n\nRun needs MCP auth. Ask the user to run:\n${logins.join("\n") || "sema mcp login <server>"}\nThen resume with resume="${runId}".`,
-        },
-      ],
-      details: { ...details, isError: true },
-    };
+    return toolError<WorkflowToolDetails>(
+      `${lines.join("\n")}\n\nRun needs MCP auth. Ask the user to run:\n${logins.join("\n") || "sema mcp login <server>"}\nThen resume with resume="${runId}".`,
+      details,
+    );
   }
 
   if (state.status !== "success") {
-    return {
-      content: [
-        {
-          type: "text",
-          text: `${lines.join("\n")}\n\nRun failed${state.reason ? `: ${state.reason}` : ""} (exit ${outcome.exitCode}). Resumable: pass resume="${runId}" to replay completed steps for free.`,
-        },
-      ],
-      details: { ...details, isError: true },
-    };
+    const reason = sanitizeDisplayText(state.reason);
+    return toolError<WorkflowToolDetails>(
+      `${lines.join("\n")}\n\nRun failed${reason ? `: ${reason}` : ""} (exit ${outcome.exitCode}). Resumable: pass resume="${runId}" to replay completed steps for free.`,
+      details,
+    );
   }
 
   const value =
@@ -226,13 +221,8 @@ export function finalResult(
           2,
         )
       : undefined;
-  return {
-    content: [
-      {
-        type: "text",
-        text: `${lines.join("\n")}${value ? `\n\nResult:\n${value}` : ""}`,
-      },
-    ],
+  return toolText(
+    `${lines.join("\n")}${value ? `\n\nResult:\n${value}` : ""}`,
     details,
-  };
+  );
 }

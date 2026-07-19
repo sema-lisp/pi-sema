@@ -1,6 +1,7 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { hasSemaFiles, semaVersion } from "../sema.js";
 
+// Hand-maintained cheat sheet injected into the system prompt; keep terse.
 const SEMA_KNOWLEDGE = `
 ## Sema Language Reference (concise)
 

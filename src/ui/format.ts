@@ -1,14 +1,29 @@
 import type { RunState } from "../workflows/model.js";
+import { sanitizeDisplayText } from "./text.js";
 
-const GLYPH = {
+/** Status → symbol maps, one per status vocabulary (phase, run, agent). */
+const PHASE_GLYPH = {
   pending: "○",
   running: "◐",
   success: "●",
   failed: "✗",
 } as const;
 
-export function statusGlyph(status: keyof typeof GLYPH): string {
-  return GLYPH[status] ?? "?";
+const RUN_MARK = {
+  live: "▶",
+  success: "✓",
+  "needs-auth": "🔑",
+  failed: "✗",
+} as const;
+
+const AGENT_MARK = {
+  running: "◐",
+  ok: "●",
+  failed: "✗",
+} as const;
+
+export function statusGlyph(status: keyof typeof PHASE_GLYPH): string {
+  return PHASE_GLYPH[status];
 }
 
 export function formatBudget(state: RunState): string {
@@ -24,14 +39,21 @@ export function formatBudget(state: RunState): string {
 
 /** One-line summary for the always-visible widget / status bar. */
 export function formatRunSummary(state: RunState): string {
-  const name = state.workflow ?? state.runId ?? "workflow";
+  const name = sanitizeDisplayText(state.workflow ?? state.runId ?? "workflow");
   const running = state.phases.find((p) => p.status === "running");
+  const focused =
+    running ??
+    (state.status === "live"
+      ? state.phases.find((p) => p.status === "pending")
+      : state.phases.findLast(
+          (p) => p.status === "success" || p.status === "failed",
+        ));
   const done = state.phases.filter(
     (p) => p.status === "success" || p.status === "failed",
   ).length;
   const phasePart =
     state.phases.length > 0
-      ? ` · ${running ? running.name : "…"} (${done}/${state.phases.length})`
+      ? ` · ${focused ? sanitizeDisplayText(focused.name) : "pending"} (${done}/${state.phases.length})`
       : "";
   const agents = [...state.agents.values()];
   const liveAgents = agents.filter((a) => a.status === "running").length;
@@ -40,15 +62,7 @@ export function formatRunSummary(state: RunState): string {
       ? ` · ${liveAgents > 0 ? `${liveAgents} live/` : ""}${agents.length} agents`
       : "";
   const budget = formatBudget(state);
-  const statusMark =
-    state.status === "live"
-      ? "▶"
-      : state.status === "success"
-        ? "✓"
-        : state.status === "needs-auth"
-          ? "🔑"
-          : "✗";
-  return `${statusMark} ${name}${phasePart}${agentPart}${budget ? ` · ${budget}` : ""}`;
+  return `${RUN_MARK[state.status]} ${name}${phasePart}${agentPart}${budget ? ` · ${budget}` : ""}`;
 }
 
 /** Multi-line render for the widget and the inline streaming tool result. */
@@ -60,19 +74,22 @@ export function formatRunLines(
 
   for (const phase of state.phases) {
     const dur = phase.durMs != null ? ` (${formatMs(phase.durMs)})` : "";
-    lines.push(`  ${statusGlyph(phase.status)} ${phase.name}${dur}`);
+    lines.push(
+      `  ${statusGlyph(phase.status)} ${sanitizeDisplayText(phase.name)}${dur}`,
+    );
     if (phase.status === "running") {
       const agents = [...state.agents.values()].filter(
         (a) => a.phaseName === phase.name,
       );
       const shown = agents.slice(-(opts.maxAgents ?? 6));
       for (const agent of shown) {
-        const mark =
-          agent.status === "running" ? "◐" : agent.status === "ok" ? "●" : "✗";
+        const mark = AGENT_MARK[agent.status];
         const lastTool = agent.toolCalls.at(-1);
         const tool =
           agent.status === "running" && lastTool ? ` → ${lastTool.tool}` : "";
-        lines.push(`      ${mark} ${agent.agentId}${tool}`);
+        lines.push(
+          `      ${mark} ${sanitizeDisplayText(agent.agentId)}${tool ? ` → ${sanitizeDisplayText(lastTool?.tool)}` : ""}`,
+        );
       }
       if (agents.length > shown.length) {
         lines.push(`      … ${agents.length - shown.length} more`);
@@ -82,11 +99,11 @@ export function formatRunLines(
 
   if (state.status === "needs-auth") {
     lines.push(
-      `  🔑 auth required${state.authRequired[0]?.server ? `: sema mcp login ${state.authRequired[0].server}` : ""}`,
+      `  🔑 auth required${state.authRequired[0]?.server ? `: sema mcp login ${sanitizeDisplayText(state.authRequired[0].server)}` : ""}`,
     );
   }
   if (state.status === "failed" && state.reason) {
-    lines.push(`  ✗ ${state.reason}`);
+    lines.push(`  ✗ ${sanitizeDisplayText(state.reason)}`);
   }
   return lines;
 }

@@ -93,8 +93,15 @@ export function registerCommands(
         .filter((t) => t.startsWith("sema_"))
         .sort();
       const lines = [
-        `Active sema tools (${active.length}): ${active.join(", ") || "none"}`,
-        `Stored library tools (${stored.length}): ${stored.map((e) => `${e.name} [${e.tier}]`).join(", ") || "none"}`,
+        `Active sema tools (${active.length})`,
+        ...(active.length > 0
+          ? active.map((name) => `  • ${name}`)
+          : ["  none"]),
+        "",
+        `Stored library tools (${stored.length})`,
+        ...(stored.length > 0
+          ? stored.map((entry) => `  • ${entry.name} [${entry.tier}]`)
+          : ["  none"]),
       ];
       ctx.ui.notify(lines.join("\n"), "info");
     },

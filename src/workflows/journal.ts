@@ -31,7 +31,7 @@ export class JournalTailer {
 
   constructor(
     private readonly runDir: string,
-    private readonly opts: { pollMs?: number } = {},
+    private readonly opts: { pollMs?: number; watch?: boolean } = {},
   ) {}
 
   on(cb: (events: JournalEvent[]) => void): () => void {
@@ -102,7 +102,7 @@ export class JournalTailer {
   }
 
   private attachWatcher(): void {
-    if (this.watcher || this.stopped) return;
+    if (this.watcher || this.stopped || this.opts.watch === false) return;
     try {
       statSync(this.runDir);
       this.watcher = watch(this.runDir, () => this.drain());
@@ -154,10 +154,10 @@ export class JournalTailer {
   }
 }
 
-/** One-shot fold helper for finished runs (dashboard historical view). */
+/** One-shot fold helper for finished runs (dashboard historical view). No fs.watch. */
 export function readJournalEvents(runDir: string): JournalEvent[] {
   const events: JournalEvent[] = [];
-  const tailer = new JournalTailer(runDir);
+  const tailer = new JournalTailer(runDir, { watch: false });
   tailer.on((batch) => events.push(...batch));
   tailer.drain();
   tailer.stop();
