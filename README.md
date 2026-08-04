@@ -8,7 +8,7 @@
 self-extension loop: the agent forges its own persistent Sema tools mid-session.
 
 [![CI](https://img.shields.io/github/actions/workflow/status/sema-lisp/pi-sema/ci.yml?branch=main&label=CI&logo=github)](https://github.com/sema-lisp/pi-sema/actions)
-[![npm](https://img.shields.io/npm/v/@sema-lang/pi-sema)](https://www.npmjs.com/package/@sema-lang/pi-sema)
+[![npm](https://img.shields.io/npm/v/@sema-lang/pi-sema?color=c8a855&logo=npm)](https://www.npmjs.com/package/@sema-lang/pi-sema)
 [![License](https://img.shields.io/github/license/sema-lisp/pi-sema?color=c8a855)](LICENSE)
 [![Website](https://img.shields.io/badge/website-sema--lang.com-c8a855)](https://sema-lang.com)
 
