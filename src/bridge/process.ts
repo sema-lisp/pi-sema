@@ -12,13 +12,14 @@ export interface McpProcessOptions {
 
 /**
  * Lifecycle owner for the ONE long-lived `sema mcp` child per session.
- * Never restarted mid-session — forged tools are injected live via its eval
- * tool; the only restart path is session reload (session_shutdown → respawn).
+ * A crash gets one automatic recovery attempt; forged tools otherwise inject
+ * into the live server through its eval tool.
  */
 export class McpProcess {
   private child: ChildProcessWithoutNullStreams | null = null;
   private _client: JsonRpcClient | null = null;
   private stopping = false;
+  /** True after the one automatic recovery attempt for this session. */
   private restarted = false;
 
   constructor(private readonly opts: McpProcessOptions) {}
@@ -87,7 +88,6 @@ export class McpProcess {
     );
     try {
       await mcpInitialize(this._client);
-      this.restarted = false; // healthy start resets the crash budget
     } catch (err) {
       const detail = stderrTail.trim();
       await this.stop();

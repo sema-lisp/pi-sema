@@ -41,6 +41,14 @@ export function spawnSema(
   args: string[],
   opts: SpawnSemaOptions = {},
 ): Promise<SpawnSemaResult> {
+  if (opts.signal?.aborted) {
+    return Promise.resolve({
+      stdout: "",
+      stderr: "",
+      code: null,
+      killed: true,
+    });
+  }
   return new Promise((resolve) => {
     const child = spawn(SEMA_BIN, args, {
       cwd: opts.cwd,

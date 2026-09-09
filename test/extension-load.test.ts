@@ -52,6 +52,7 @@ describe.skipIf(!existsSync(DIST))("built extension loads", () => {
     expect(events).toContain("session_start");
     expect(events).toContain("session_shutdown");
     expect(events).toContain("before_agent_start");
+    expect(events).toContain("tool_result");
     expect(shortcuts).toHaveLength(1);
   });
 });

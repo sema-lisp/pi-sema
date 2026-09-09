@@ -156,7 +156,7 @@ export class SemaBridge {
 
     if (added.length > 0) {
       const active = new Set(this.pi.getActiveTools());
-      for (const name of this.registered.values()) active.add(name);
+      for (const name of added) active.add(name);
       this.pi.setActiveTools([...active]);
     }
     return added;

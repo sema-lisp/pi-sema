@@ -25,6 +25,7 @@ import { registerForgeTool } from "./forge/forge.js";
 import { registerWorkflowRunTool } from "./workflows/runner.js";
 import { registerWorkflowAuthoring } from "./workflows/author.js";
 import { registerDashboard } from "./ui/dashboard.js";
+import { registerToolResultErrorHook } from "./tool-result.js";
 
 export interface PiSemaRuntime {
   cfg: PiSemaConfig;
@@ -81,6 +82,7 @@ export default function (pi: ExtensionAPI) {
   registerWorkflowAuthoring(pi, getRuntime);
   registerDashboard(pi, getRuntime);
   registerContextHooks(pi);
+  registerToolResultErrorHook(pi);
 }
 
 let sandboxSupportCache: boolean | undefined;
