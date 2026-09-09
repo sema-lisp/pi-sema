@@ -151,7 +151,7 @@ export function registerForgeTool(
         tier,
         "tools",
         name,
-        `; ${p.description}\n${p.source.trim()}`,
+        `${commentDescription(p.description)}\n${p.source.trim()}`,
       );
 
       // 4. Inject into the live server env + 5. register with pi.
@@ -196,4 +196,12 @@ export function registerForgeTool(
 /** Extract the tool name from the (single) deftool form; null when absent/ambiguous. */
 export function extractDeftoolName(source: string): string | null {
   return extractSingleFormName(source, "deftool");
+}
+
+function commentDescription(description: string): string {
+  return description
+    .trim()
+    .split(/\r\n?|\n/)
+    .map((line) => `; ${line}`)
+    .join("\n");
 }

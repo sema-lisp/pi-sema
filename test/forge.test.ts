@@ -156,6 +156,8 @@ describe.skipIf(!semaAvailable())(
     function setup(piNameFor: (name: string) => string | undefined) {
       let forge: { execute: (...args: any[]) => Promise<any> } | undefined;
       const appendEntry = vi.fn();
+      const save = vi.fn(() => "/tmp/example.sema");
+      const injectSource = vi.fn(async () => ({ content: [] }));
       const pi = {
         registerTool: (definition: {
           name: string;
@@ -167,16 +169,16 @@ describe.skipIf(!semaAvailable())(
       };
       const runtime = {
         cfg: structuredClone(DEFAULT_CONFIG),
-        store: { resolve: () => null, save: () => "/tmp/example.sema" },
+        store: { resolve: () => null, save },
         bridge: {
           running: true,
-          injectSource: async () => ({ content: [] }),
+          injectSource,
           refresh: async () => [],
           piNameFor,
         },
       } as unknown as PiSemaRuntime;
       registerForgeTool(pi as never, () => runtime);
-      return { forge: forge!, appendEntry };
+      return { forge: forge!, appendEntry, injectSource, save };
     }
 
     const params = {
@@ -218,6 +220,32 @@ describe.skipIf(!semaAvailable())(
       expect(result.content[0].text).toContain(
         "(tool/invoke example {:param value})",
       );
+    }, 20_000);
+
+    it("comments every stored description line without changing live source", async () => {
+      const { forge, injectSource, save } = setup(() => "sema_example");
+      const confirm = vi.fn(async () => true);
+      const source = '(deftool example "d" {} (lambda () 1))';
+      await forge.execute(
+        "id",
+        {
+          ...params,
+          description: "first line\r\n(define description-marker 1)\nlast line",
+          source,
+        },
+        undefined,
+        undefined,
+        { ...context, ui: { confirm } },
+      );
+
+      expect(confirm).toHaveBeenCalledOnce();
+      expect(save).toHaveBeenCalledWith(
+        "project",
+        "tools",
+        "example",
+        '; first line\n; (define description-marker 1)\n; last line\n(deftool example "d" {} (lambda () 1))',
+      );
+      expect(injectSource).toHaveBeenCalledWith(source);
     }, 20_000);
   },
 );
