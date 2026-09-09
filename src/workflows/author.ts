@@ -147,24 +147,26 @@ export async function submitWorkflow(
     check.warnings.length > 0
       ? `\nWarnings:\n${formatDiagnostics(check.warnings)}`
       : "";
-  let approved = true;
-  let runNow = false;
-  if (ctx.hasUI) {
-    approved = await ctx.ui.confirm(
-      `Store Sema workflow "${name}"?`,
-      `${p.description}\n\n${summary.join("\n")}${warningText}\n\n${truncate(p.source.trim(), 3000)}`,
-    );
-    if (!approved) {
-      rounds.delete(name);
-      return toolError(
-        "status: declined — the user rejected this workflow. Ask what to change; do not resubmit unchanged.",
-      );
-    }
-    runNow = await ctx.ui.confirm(
-      `Run "${name}" now?`,
-      "Runs with live status. LLM steps spend real tokens (capped by the workflow's :budget).",
+  if (!ctx.hasUI) {
+    rounds.delete(name);
+    return toolError(
+      "status: approval_required — workflow storage needs an interactive user approval. Do not persist this workflow; ask the user to rerun it in the TUI.",
     );
   }
+  const approved = await ctx.ui.confirm(
+    `Store Sema workflow "${name}"?`,
+    `${p.description}\n\n${summary.join("\n")}${warningText}\n\n${truncate(p.source.trim(), 3000)}`,
+  );
+  if (!approved) {
+    rounds.delete(name);
+    return toolError(
+      "status: declined — the user rejected this workflow. Ask what to change; do not resubmit unchanged.",
+    );
+  }
+  const runNow = await ctx.ui.confirm(
+    `Run "${name}" now?`,
+    "Runs with live status. LLM steps spend real tokens (capped by the workflow's :budget).",
+  );
 
   const tier = p.tier ?? "project";
   const path = runtime.store.save(tier, "workflows", name, storedSource);

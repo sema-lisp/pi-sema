@@ -151,6 +151,21 @@ describe.skipIf(!semaAvailable())(
       expect(runtime.store.resolve("workflows", "demo")).toBeNull();
     }, 30_000);
 
+    it("requires an interactive approval before it stores a workflow", async () => {
+      const result = await submitWorkflow(
+        runtime,
+        makeCtx(false, []),
+        { name: "demo", description: "d", source: GOOD },
+        new Map(),
+      );
+      const text =
+        result.content[0].type === "text" ? result.content[0].text : "";
+
+      expect(text).toContain("approval_required");
+      expect(runtime.store.resolve("workflows", "demo")).toBeNull();
+      expect(confirms).toHaveLength(0);
+    }, 30_000);
+
     it("rejects a submitted name that differs from the defworkflow name", async () => {
       const result = await submitWorkflow(
         runtime,
@@ -170,7 +185,7 @@ describe.skipIf(!semaAvailable())(
     it("keeps every description line inside comments in the stored source", async () => {
       const result = await submitWorkflow(
         runtime,
-        makeCtx(false, []),
+        makeCtx(true, [true, false]),
         {
           name: "demo",
           description: "first line\n(not-a-real-builtin)",
