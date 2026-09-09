@@ -24,15 +24,9 @@ vi.mock("../src/bridge/jsonrpc.js", async (importOriginal) => ({
 }));
 
 import { SemaBridge } from "../src/bridge/bridge.js";
+import { DEFAULT_CONFIG } from "../src/config.js";
 
-const config = {
-  sandbox: { mcp: "all", workflows: "all" },
-  excludeTools: [],
-  library: { defaultTier: "project" },
-  forge: { maxRounds: 3, probeTimeoutMs: 15_000 },
-  workflows: { defaultBudgetUsd: null, runDir: null },
-  ui: { dashboardShortcut: "ctrl+alt+s" },
-};
+const config = { ...structuredClone(DEFAULT_CONFIG), excludeTools: [] };
 
 describe("SemaBridge.refresh", () => {
   it("does not reactivate a manually deactivated tool when adding another", async () => {
