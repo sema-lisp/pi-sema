@@ -150,5 +150,42 @@ describe.skipIf(!semaAvailable())(
       expect(text).toContain("declined");
       expect(runtime.store.resolve("workflows", "demo")).toBeNull();
     }, 30_000);
+
+    it("rejects a submitted name that differs from the defworkflow name", async () => {
+      const result = await submitWorkflow(
+        runtime,
+        makeCtx(false, []),
+        { name: "stored-name", description: "d", source: GOOD },
+        new Map(),
+      );
+      const text =
+        result.content[0].type === "text" ? result.content[0].text : "";
+
+      expect(text).toContain(
+        'declared name "demo" does not match submitted name "stored-name"',
+      );
+      expect(runtime.store.resolve("workflows", "stored-name")).toBeNull();
+    });
+
+    it("keeps every description line inside comments in the stored source", async () => {
+      const result = await submitWorkflow(
+        runtime,
+        makeCtx(false, []),
+        {
+          name: "demo",
+          description: "first line\n(not-a-real-builtin)",
+          source: GOOD,
+        },
+        new Map(),
+      );
+      const text =
+        result.content[0].type === "text" ? result.content[0].text : "";
+      const entry = runtime.store.resolve("workflows", "demo")!;
+      const stored = readFileSync(entry.path, "utf-8");
+
+      expect(text).toContain("status: stored");
+      expect(stored).toContain("; first line\n; (not-a-real-builtin)");
+      expect(stored).not.toContain("\n(not-a-real-builtin)");
+    }, 30_000);
   },
 );

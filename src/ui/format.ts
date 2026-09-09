@@ -13,6 +13,8 @@ const RUN_MARK = {
   live: "▶",
   success: "✓",
   "needs-auth": "🔑",
+  "needs-approval": "⏸",
+  rejected: "⊘",
   failed: "✗",
 } as const;
 
@@ -100,6 +102,17 @@ export function formatRunLines(
   if (state.status === "needs-auth") {
     lines.push(
       `  🔑 auth required${state.authRequired[0]?.server ? `: sema mcp login ${sanitizeDisplayText(state.authRequired[0].server)}` : ""}`,
+    );
+  }
+  if (state.status === "needs-approval") {
+    const approval = state.approval;
+    lines.push(
+      `  ⏸ approval required${approval?.id ? `: ${sanitizeDisplayText(approval.id)}` : ""}${approval?.reason ? ` — ${sanitizeDisplayText(approval.reason)}` : ""}`,
+    );
+  }
+  if (state.status === "rejected") {
+    lines.push(
+      `  ⊘ approval rejected${state.reason ? `: ${sanitizeDisplayText(state.reason)}` : ""}`,
     );
   }
   if (state.status === "failed" && state.reason) {

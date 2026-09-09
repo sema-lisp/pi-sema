@@ -115,7 +115,7 @@ describe("reduceRun edge cases", () => {
     expect(state.budget.costUsd).toBe(0.25);
   });
 
-  it("maps needs-auth and failed run.ended statuses", () => {
+  it("maps needs-auth, approval, rejected, and failed run.ended statuses", () => {
     const auth = foldEvents([
       { event: "auth.required", seq: 1, ts: "t", server: "linear" },
       { event: "run.ended", seq: 2, ts: "t", status: "needs-auth", dur_ms: 5 },
@@ -135,6 +135,41 @@ describe("reduceRun edge cases", () => {
     ]);
     expect(failed.status).toBe("failed");
     expect(failed.reason).toBe("budget exceeded");
+
+    const approval = foldEvents([
+      {
+        event: "approval.requested",
+        seq: 1,
+        ts: "t",
+        approval_id: "review-release",
+        key: "release",
+        reason: "publish production",
+      },
+      {
+        event: "run.ended",
+        seq: 2,
+        ts: "t",
+        status: "needs-approval",
+        reason: "human approval required",
+      },
+    ]);
+    expect(approval.status).toBe("needs-approval");
+    expect(approval.approval).toEqual({
+      id: "review-release",
+      key: "release",
+      reason: "publish production",
+    });
+
+    const rejected = foldEvents([
+      {
+        event: "run.ended",
+        seq: 1,
+        ts: "t",
+        status: "rejected",
+        reason: "release window closed",
+      },
+    ]);
+    expect(rejected.status).toBe("rejected");
   });
 
   it("a resume segment's run.started reopens the run without duplicating phases", () => {

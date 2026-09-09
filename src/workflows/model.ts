@@ -10,7 +10,8 @@ export interface JournalEvent {
   [k: string]: unknown;
 }
 
-export type RunStatus = "live" | "success" | "failed" | "needs-auth";
+export type RunStatus =
+  "live" | "success" | "failed" | "needs-auth" | "needs-approval" | "rejected";
 
 export interface PhaseState {
   name: string;
@@ -48,6 +49,7 @@ export interface RunState {
     limit?: number;
   };
   authRequired: { server?: string; detail?: string }[];
+  approval?: { id?: string; key?: string; reason?: string };
   startedTs?: string;
   endedTs?: string;
   durMs?: number;
@@ -152,6 +154,14 @@ export function reduceRun(state: RunState, ev: JournalEvent): RunState {
       });
       break;
     }
+    case "approval.requested": {
+      state.approval = {
+        id: str(ev.approval_id),
+        key: str(ev.key),
+        reason: str(ev.reason),
+      };
+      break;
+    }
     case "run.ended": {
       const status = str(ev.status);
       state.status =
@@ -159,7 +169,11 @@ export function reduceRun(state: RunState, ev: JournalEvent): RunState {
           ? "success"
           : status === "needs-auth"
             ? "needs-auth"
-            : "failed";
+            : status === "needs-approval"
+              ? "needs-approval"
+              : status === "rejected"
+                ? "rejected"
+                : "failed";
       state.reason = str(ev.reason);
       state.endedTs = ev.ts;
       state.durMs = num(ev.dur_ms);

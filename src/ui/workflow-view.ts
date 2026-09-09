@@ -22,6 +22,7 @@ export interface WorkflowRunDetails {
   checkpointCount: number;
   budget: RunState["budget"];
   authRequired: RunState["authRequired"];
+  approval?: RunState["approval"];
   durMs?: number;
 }
 
@@ -36,6 +37,8 @@ const RUN_MARK: Record<RunStatus, string> = {
   live: "▶",
   success: "✓",
   "needs-auth": "🔑",
+  "needs-approval": "⏸",
+  rejected: "⊘",
   failed: "✗",
 };
 
@@ -65,6 +68,7 @@ export function toWorkflowRunDetails(state: RunState): WorkflowRunDetails {
     checkpointCount: state.checkpoints.length,
     budget: { ...state.budget },
     authRequired: state.authRequired.map((auth) => ({ ...auth })),
+    approval: state.approval ? { ...state.approval } : undefined,
     durMs: state.durMs,
   };
 }
@@ -144,6 +148,15 @@ export function formatWorkflowDetailsRows(
     const server = sanitizeDisplayText(details.authRequired[0]?.server);
     rows.push(
       `  🔑 auth required${server ? `: sema mcp login ${server}` : ""}`,
+    );
+  } else if (details.status === "needs-approval") {
+    const approval = details.approval;
+    rows.push(
+      `  ⏸ approval required${approval?.id ? `: ${sanitizeDisplayText(approval.id)}` : ""}${approval?.reason ? ` — ${sanitizeDisplayText(approval.reason)}` : ""}`,
+    );
+  } else if (details.status === "rejected") {
+    rows.push(
+      `  ⊘ approval rejected${details.reason ? `: ${sanitizeDisplayText(details.reason)}` : ""}`,
     );
   } else if (details.status === "failed" && details.reason) {
     rows.push(`  ✗ ${sanitizeDisplayText(details.reason)}`);

@@ -11,12 +11,18 @@ vi.mock("../src/sema.js", () => ({
   }),
 }));
 import {
+  defaultRunRoot,
   finalResult,
   registerWorkflowRunTool,
 } from "../src/workflows/runner.js";
 import { foldEvents } from "../src/workflows/model.js";
 
 describe("workflow runner UI integration", () => {
+  it("resolves configured relative run roots from the session cwd", () => {
+    expect(defaultRunRoot("/project", "runs")).toBe("/project/runs");
+    expect(defaultRunRoot("/project", "/shared/runs")).toBe("/shared/runs");
+  });
+
   it("registers custom call and result renderers", () => {
     let definition: Record<string, unknown> | undefined;
     const pi = {
@@ -95,6 +101,72 @@ describe("workflow runner UI integration", () => {
 
     expect(text).not.toContain("secret");
     expect(text).not.toContain("\u001b");
+  });
+
+  it("reports approval pauses as non-resumable from pi-sema", () => {
+    const state = foldEvents([
+      {
+        event: "run.started",
+        seq: 0,
+        ts: "t",
+        workflow: "publish",
+        run_id: "run-1",
+      },
+      {
+        event: "approval.requested",
+        seq: 1,
+        ts: "t",
+        approval_id: "review-release",
+        key: "release",
+        reason: "publish production",
+      },
+      {
+        event: "run.ended",
+        seq: 2,
+        ts: "t",
+        status: "needs-approval",
+        reason: "human approval required",
+      },
+    ]);
+
+    const result = finalResult({
+      runId: "run-1",
+      runDir: "/tmp/run-1",
+      state,
+      exitCode: 3,
+    });
+    const text =
+      result.content[0].type === "text" ? result.content[0].text : "";
+
+    expect(result.details.run?.status).toBe("needs-approval");
+    expect(text).toContain("review-release");
+    expect(text).toContain("cannot be resumed here");
+    expect(text).not.toContain('resume="run-1"');
+  });
+
+  it("does not tell the agent to resume a rejected approval", () => {
+    const state = foldEvents([
+      {
+        event: "run.ended",
+        seq: 0,
+        ts: "t",
+        status: "rejected",
+        reason: "release window closed",
+      },
+    ]);
+
+    const result = finalResult({
+      runId: "run-1",
+      runDir: "/tmp/run-1",
+      state,
+      exitCode: 1,
+    });
+    const text =
+      result.content[0].type === "text" ? result.content[0].text : "";
+
+    expect(result.details.run?.status).toBe("rejected");
+    expect(text).toContain("start a new run");
+    expect(text).not.toContain('resume="run-1"');
   });
 
   it("clears its unique widget when workflow execution throws", async () => {

@@ -12,7 +12,7 @@
  * deliberately separate tools so all live-status logic lives here alone.
  */
 import { Type } from "typebox";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { randomBytes } from "node:crypto";
 import type {
   ExtensionAPI,
@@ -61,7 +61,7 @@ export interface RunOutcome {
 }
 
 export function defaultRunRoot(cwd: string, configured: string | null): string {
-  return configured ?? join(cwd, ".sema", "runs");
+  return configured ? resolve(cwd, configured) : join(cwd, ".sema", "runs");
 }
 
 export function newRunId(): string {
@@ -199,6 +199,22 @@ export function finalResult(
     );
     return toolError<WorkflowToolDetails>(
       `${lines.join("\n")}\n\nRun needs MCP auth. Ask the user to run:\n${logins.join("\n") || "sema mcp login <server>"}\nThen resume with resume="${runId}".`,
+      details,
+    );
+  }
+
+  if (state.status === "needs-approval") {
+    const approvalId = state.approval?.id;
+    return toolError<WorkflowToolDetails>(
+      `${lines.join("\n")}\n\nRun paused for human approval${approvalId ? ` (${sanitizeDisplayText(approvalId)})` : ""}. Pi did not start this run with durable approval credentials, so it cannot be resumed here. Ask the user to configure their approval flow and start a new run.`,
+      details,
+    );
+  }
+
+  if (state.status === "rejected") {
+    const reason = sanitizeDisplayText(state.reason);
+    return toolError<WorkflowToolDetails>(
+      `${lines.join("\n")}\n\nRun approval was rejected${reason ? `: ${reason}` : ""}. Revise the workflow or approval request, then start a new run.`,
       details,
     );
   }

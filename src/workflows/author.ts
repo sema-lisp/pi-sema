@@ -10,7 +10,7 @@
  * running as separate tools/files keeps all live-status logic in one place.
  */
 import { Type } from "typebox";
-import { writeFileSync, mkdtempSync } from "node:fs";
+import { writeFileSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -106,15 +106,26 @@ export async function submitWorkflow(
   if (!declared) {
     return toolError("source must contain exactly one (defworkflow …) form");
   }
+  if (declared !== name) {
+    return toolError(
+      `declared name "${declared}" does not match submitted name "${name}" — make them agree`,
+    );
+  }
+
+  const storedSource = withDescription(p.description, p.source);
 
   // Static validation — no LLM, no eval. Gate on error-level diagnostics only:
   // under --strict, warnings alone already flip the exit code.
-  const scratch = join(
-    mkdtempSync(join(tmpdir(), "pi-sema-wf-check-")),
-    `${name.replace(/\//g, "_")}.sema`,
-  );
-  writeFileSync(scratch, p.source);
-  const check = await workflowCheck(scratch, { cwd: ctx.cwd, signal });
+  const scratchDir = mkdtempSync(join(tmpdir(), "pi-sema-wf-check-"));
+  const scratch = join(scratchDir, `${name.replace(/\//g, "_")}.sema`);
+  const check = await (async () => {
+    try {
+      writeFileSync(scratch, storedSource);
+      return await workflowCheck(scratch, { cwd: ctx.cwd, signal });
+    } finally {
+      rmSync(scratchDir, { recursive: true, force: true });
+    }
+  })();
   if (!check.ok) {
     const round = (rounds.get(name) ?? 0) + 1;
     rounds.set(name, round);
@@ -156,12 +167,7 @@ export async function submitWorkflow(
   }
 
   const tier = p.tier ?? "project";
-  const path = runtime.store.save(
-    tier,
-    "workflows",
-    name,
-    `; ${p.description}\n${p.source.trim()}`,
-  );
+  const path = runtime.store.save(tier, "workflows", name, storedSource);
   rounds.delete(name);
 
   const argsHint =
@@ -175,6 +181,16 @@ export async function submitWorkflow(
         : `Not run. The user can run it later via sema_workflow_run or /sema:workflows.`
     }`,
   );
+}
+
+/** Prefix every description line so it remains comment text in the stored source. */
+function withDescription(description: string, source: string): string {
+  const comment = description
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => `; ${line}`)
+    .join("\n");
+  return `${comment}\n${source.trim()}`;
 }
 
 export function registerWorkflowAuthoring(

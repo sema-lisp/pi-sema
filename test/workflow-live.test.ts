@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { runWorkflow } from "../src/workflows/runner.js";
+import { defaultRunRoot, runWorkflow } from "../src/workflows/runner.js";
 import { workflowCheck } from "../src/workflows/check.js";
 import type { RunState } from "../src/workflows/model.js";
 
@@ -62,6 +62,24 @@ describe.skipIf(!semaAvailable())("workflow run + check (live sema)", () => {
     ).toBe("6");
     expect(outcome.runId.startsWith("wfpi_")).toBe(true); // SEMA_WORKFLOW_RUN_ID pinning worked
     expect(states.length).toBeGreaterThan(0); // tailer streamed at least one batch
+  }, 30_000);
+
+  it("uses the session cwd for a configured relative run root", async () => {
+    const file = join(dir, "relative-root.sema");
+    writeFileSync(file, FIXTURE_WF);
+    const runRoot = defaultRunRoot(dir, "relative-runs");
+
+    const outcome = await runWorkflow({
+      file,
+      args: {},
+      runRoot,
+      cwd: dir,
+    });
+
+    expect(outcome.exitCode).toBe(0);
+    expect(outcome.state.status).toBe("success");
+    expect(outcome.runDir.startsWith(join(dir, "relative-runs"))).toBe(true);
+    expect(existsSync(join(outcome.runDir, "events.jsonl"))).toBe(true);
   }, 30_000);
 
   it("workflowCheck gates on error count, not exit code (warnings exit 1 under --strict)", async () => {
