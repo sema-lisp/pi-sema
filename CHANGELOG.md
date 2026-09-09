@@ -13,6 +13,14 @@
 
 ### Changed
 
+- Workflow runs now preserve `needs-approval` and `rejected` as distinct terminal
+  states, resolve relative run directories from the session working directory, and
+  give correct recovery instructions.
+- Configuration files are validated before merge. Invalid values are ignored with a
+  warning instead of breaking extension startup.
+- Removed the unsupported `--sema-budget`, `sandbox.workflows`, and
+  `workflows.defaultBudgetUsd` controls. Sema 1.36 cannot enforce these at the
+  workflow-run level; budgets remain part of each workflow's `:budget` metadata.
 - **Single theme**: dropped `sema-light` (Pi themes cannot set the terminal background,
   so a light variant only works in light terminal profiles — cut until there's demand).
   The `sema` theme now matches the editor-reference aesthetic: burnt-umber `#27160c`
@@ -26,6 +34,22 @@
   success/error `#6a9955`/`#c85555`, border `#2b2620`, gold-soft selection overlay, gold-bright
   links, brand-blend tool backgrounds, and the `thinkingMax` tier (optional in Pi's schema,
   contrary to the earlier exactly-required test assumption).
+
+### Fixed
+
+- Pi now receives failed extension tool results with `isError: true`.
+- MCP crash recovery stops after one automatic restart, newly discovered tools do not
+  reactivate tools disabled by the user, and an already-aborted call does not start a
+  Sema subprocess.
+- Tool and workflow creation require interactive approval before persistence.
+- Stored descriptions remain comments on every line, so description text cannot become
+  unchecked Sema source.
+- Forge uses the valid `tool/invoke` form, reports excluded tools accurately, and accepts
+  valid definitions that contain form examples inside strings, comments, or quoted data.
+- Workflow submission enforces the declared name, removes validation scratch directories,
+  and validates the exact source that it stores.
+- The injected Sema reference uses supported comment and `deftool` syntax, and projects are
+  rescanned after an initial negative `.sema` file check.
 
 ## 0.2.0 — 2026-07-17
 
