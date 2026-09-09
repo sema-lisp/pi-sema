@@ -91,7 +91,7 @@ opens the dashboard). Runs shell out to `sema workflow run --run-dir … --no-au
   scatter dirs into repos). Stored tool files are passed to `sema mcp` as filepath args at
   start; forging injects live in addition.
 - `src/config.ts`: layered config — `DEFAULT_CONFIG` ← global `config.json` ← project
-  `config.json` ← CLI flags (`--sema-sandbox`, `--sema-exclude`, `--sema-budget`). Never
+  `config.json` ← CLI flags (`--sema-sandbox`, `--sema-exclude`). Never
   throws; malformed config warns and is ignored.
 - `src/sema.ts`: `spawnSema` is the single subprocess helper. Note sema's own `--timeout` flag
   is a **no-op** — timeouts/abort are enforced here in Node.

@@ -37,7 +37,7 @@ export const CREATE_TOOL_GUIDELINES = [
   "When a task needs a reusable capability that a short Sema script could provide (parsing, API calls, data transforms), forge it with create_sema_tool instead of repeating ad-hoc bash — the tool persists and becomes directly callable as sema_<name> on your next turn.",
   "If create_sema_tool reports probe_failed, correct the source using the error's line/col/hint and resubmit.",
   "To UPDATE an existing tool, re-forge it with create_sema_tool — editing its .sema file on disk does NOT reload the live definition. A re-forge that changes the params map refreshes the schema too.",
-  "Right after forging, you can exercise the tool in the SAME turn via sema_eval: (tool-name …args). The direct sema_<name> tool becomes callable next turn.",
+  "Right after forging, you can exercise the tool in the SAME turn via sema_eval: (tool/invoke tool-name {:param value}). The direct sema_<name> tool becomes callable next turn.",
 ];
 
 export const CREATE_TOOL_DESCRIPTION = `Create a new persistent Sema tool from source. The source is verified in a strict sandbox (no LLM/network/shell/fs-write) with (tool? name) asserted, shown to the user for approval, stored in the tool library, injected into the live Sema environment, and registered as a pi tool named sema_<name> — callable from your NEXT turn (not this one).

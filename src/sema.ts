@@ -125,15 +125,14 @@ const SKIP_DIRS = new Set([
   ".sema",
 ]);
 
-const semaFilesCache = new Map<string, boolean>();
+const semaFilesCache = new Set<string>();
 
-/** Pure-Node bounded scan for .sema files (no fd/find dependency). Cached per cwd. */
+/** Pure-Node bounded scan for .sema files (no fd/find dependency). Positive hits are cached per cwd. */
 export function hasSemaFiles(cwd: string, maxDepth = 4): boolean {
-  const cached = semaFilesCache.get(cwd);
-  if (cached !== undefined) return cached;
+  if (semaFilesCache.has(cwd)) return true;
 
   const found = scanForSema(cwd, maxDepth);
-  semaFilesCache.set(cwd, found);
+  if (found) semaFilesCache.add(cwd);
   return found;
 }
 

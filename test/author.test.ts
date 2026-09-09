@@ -24,6 +24,13 @@ describe("extractDefworkflowName", () => {
       extractDefworkflowName('(defworkflow a "d" {})\n(defworkflow b "d" {})'),
     ).toBeNull();
   });
+
+  it("ignores defworkflow-like text in strings and comments", () => {
+    const source = `; (defworkflow comment "d" {})
+(define help "(defworkflow string \\"d\\" {})")
+(defworkflow actual "d" {})`;
+    expect(extractDefworkflowName(source)).toBe("actual");
+  });
 });
 
 describe("summarizeWorkflow", () => {

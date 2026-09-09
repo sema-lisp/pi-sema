@@ -1,7 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { execSync } from "node:child_process";
-import { extractDeftoolName } from "../src/forge/forge.js";
+import { extractDeftoolName, registerForgeTool } from "../src/forge/forge.js";
 import { verifyToolSource } from "../src/forge/probe.js";
+import { DEFAULT_CONFIG } from "../src/config.js";
+import type { PiSemaRuntime } from "../src/index.js";
 
 describe("extractDeftoolName", () => {
   it("extracts the name from a single deftool", () => {
@@ -27,6 +29,56 @@ describe("extractDeftoolName", () => {
         '(deftool a "d" {} (lambda () 1))\n(deftool b "d" {} (lambda () 2))',
       ),
     ).toBeNull();
+  });
+
+  it("ignores deftool-like text in strings, comments, and quoted data", () => {
+    const source = `; (deftool comment "d" {} (lambda () 1))
+'(deftool quoted "d" {} (lambda () 1))
+(define help "(deftool string \\"d\\" {} (lambda () 1))")
+(deftool actual "d" {} (lambda () 1))`;
+    expect(extractDeftoolName(source)).toBe("actual");
+  });
+
+  it("ignores deftool-like data inside a short lambda", () => {
+    const source = `#(deftool hidden "d" {} (lambda () 1))
+(deftool actual "d" {} (lambda () 1))`;
+    expect(extractDeftoolName(source)).toBe("actual");
+  });
+});
+
+describe("create_sema_tool approval", () => {
+  it("rejects headless creation before verification or persistence", async () => {
+    let forge: { execute: (...args: any[]) => Promise<any> } | undefined;
+    const save = vi.fn();
+    const pi = {
+      registerTool: (definition: {
+        name: string;
+        execute: (...args: any[]) => Promise<any>;
+      }) => {
+        if (definition.name === "create_sema_tool") forge = definition;
+      },
+    };
+    const runtime = {
+      cfg: structuredClone(DEFAULT_CONFIG),
+      store: { save },
+      bridge: {},
+    } as unknown as PiSemaRuntime;
+    registerForgeTool(pi as never, () => runtime);
+
+    const result = await forge!.execute(
+      "id",
+      {
+        name: "headless",
+        description: "d",
+        source: '(deftool headless "d" {} (lambda () 1))',
+      },
+      undefined,
+      undefined,
+      { cwd: process.cwd(), hasUI: false },
+    );
+
+    expect(result.content[0].text).toContain("requires the Pi TUI");
+    expect(save).not.toHaveBeenCalled();
   });
 });
 
@@ -97,3 +149,75 @@ describe.skipIf(!semaAvailable())("verifyToolSource (live sema)", () => {
     }
   }, 20_000);
 });
+
+describe.skipIf(!semaAvailable())(
+  "create_sema_tool registration (live probe)",
+  () => {
+    function setup(piNameFor: (name: string) => string | undefined) {
+      let forge: { execute: (...args: any[]) => Promise<any> } | undefined;
+      const appendEntry = vi.fn();
+      const pi = {
+        registerTool: (definition: {
+          name: string;
+          execute: (...args: any[]) => Promise<any>;
+        }) => {
+          if (definition.name === "create_sema_tool") forge = definition;
+        },
+        appendEntry,
+      };
+      const runtime = {
+        cfg: structuredClone(DEFAULT_CONFIG),
+        store: { resolve: () => null, save: () => "/tmp/example.sema" },
+        bridge: {
+          running: true,
+          injectSource: async () => ({ content: [] }),
+          refresh: async () => [],
+          piNameFor,
+        },
+      } as unknown as PiSemaRuntime;
+      registerForgeTool(pi as never, () => runtime);
+      return { forge: forge!, appendEntry };
+    }
+
+    const params = {
+      name: "example",
+      description: "d",
+      source: '(deftool example "d" {} (lambda () 1))',
+      tier: "project" as const,
+    };
+    const context = {
+      cwd: process.cwd(),
+      hasUI: true,
+      ui: { confirm: async () => true },
+    };
+
+    it("does not claim registration when the bridge excludes the forged tool", async () => {
+      const { forge, appendEntry } = setup(() => undefined);
+      const result = await forge.execute(
+        "id",
+        params,
+        undefined,
+        undefined,
+        context,
+      );
+
+      expect(result.content[0].text).toContain("not exposed as a pi tool");
+      expect(appendEntry).not.toHaveBeenCalled();
+    }, 20_000);
+
+    it("gives the valid same-turn invocation form", async () => {
+      const { forge } = setup(() => "sema_example");
+      const result = await forge.execute(
+        "id",
+        params,
+        undefined,
+        undefined,
+        context,
+      );
+
+      expect(result.content[0].text).toContain(
+        "(tool/invoke example {:param value})",
+      );
+    }, 20_000);
+  },
+);

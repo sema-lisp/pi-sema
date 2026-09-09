@@ -8,7 +8,7 @@ const SEMA_KNOWLEDGE = `
 Sema is a Scheme-like Lisp where LLM primitives are first-class.
 
 ### Key syntax
-- Comments: ; line, #| block |#
+- Comments: ; line
 - Keywords: :foo, :bar
 - Maps: {:key val}, vectors: [1 2 3]
 - f-strings: f"hello \${name}"
@@ -22,7 +22,7 @@ Sema is a Scheme-like Lisp where LLM primitives are first-class.
 - (llm/complete "prompt") — simple completion
 - (llm/extract {:fields} "text") — structured extraction
 - (llm/classify '(a b c) "text") — classification
-- (deftool name {:params} (lambda ...)) — define a tool
+- (deftool name "description" {:params} (lambda ...)) — define a tool
 - (defagent name {:system ... :tools [...] :max-turns n}) — define an agent
 - (agent/run agent "task") — run an agent
 - (llm/with-budget {:max-cost-usd n} (lambda ...)) — budget scope

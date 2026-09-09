@@ -20,7 +20,6 @@ import type {
 import type { PiSemaRuntime } from "../index.js";
 import { sanitizeName } from "../library/store.js";
 import type { TierName } from "../paths.js";
-import { toPiToolName } from "../bridge/schema.js";
 import { contentToText } from "../bridge/jsonrpc.js";
 import { toolText, toolError } from "../tool-result.js";
 import { extractSingleFormName } from "../util.js";
@@ -94,6 +93,11 @@ export function registerForgeTool(
           `declared name "${name}" does not match the deftool form's name "${deftoolName}" — make them agree`,
         );
       }
+      if (!ctx.hasUI) {
+        return toolError(
+          "create_sema_tool requires the Pi TUI so the user can review and approve the source before it is stored or run.",
+        );
+      }
 
       // 1. Verify in the strict sandbox (the ONLY place --no-llm is used).
       onUpdate?.({
@@ -120,17 +124,15 @@ export function registerForgeTool(
       }
 
       // 2. The single human gate: show the source before anything persists.
-      if (ctx.hasUI) {
-        const approved = await ctx.ui.confirm(
-          `Create Sema tool "${name}"?`,
-          `${p.description}\n\n${p.source.trim()}\n\nVerified in strict sandbox. It will run UNSANDBOXED when called (sandbox: ${cfg.sandbox.mcp}).`,
+      const approved = await ctx.ui.confirm(
+        `Create Sema tool "${name}"?`,
+        `${p.description}\n\n${p.source.trim()}\n\nVerified in strict sandbox. It will run UNSANDBOXED when called (sandbox: ${cfg.sandbox.mcp}).`,
+      );
+      if (!approved) {
+        rounds.delete(name);
+        return toolError(
+          "status: declined — the user rejected this tool. Do not resubmit unchanged; ask them what to change.",
         );
-        if (!approved) {
-          rounds.delete(name);
-          return toolError(
-            "status: declined — the user rejected this tool. Do not resubmit unchanged; ask them what to change.",
-          );
-        }
       }
 
       // 3. Store to the chosen tier — ask when the model didn't specify one.
@@ -157,17 +159,24 @@ export function registerForgeTool(
         content: [{ type: "text", text: "injecting into live environment…" }],
         details: { stage: "inject" },
       });
-      let piName = toPiToolName(deftoolName);
-      if (bridge.running) {
-        const injected = await bridge.injectSource(p.source);
-        if (injected.isError) {
-          const text = contentToText(injected.content);
-          return toolError(
-            `stored to ${path}, but live injection failed: ${text}\nIt will load on next session start.`,
-          );
-        }
-        await bridge.refresh();
-        piName = bridge.piNameFor(deftoolName) ?? piName;
+      if (!bridge.running) {
+        return toolError(
+          `stored to ${path}, but the MCP bridge is not running. It will load when the bridge starts; no pi tool was registered.`,
+        );
+      }
+      const injected = await bridge.injectSource(p.source);
+      if (injected.isError) {
+        const text = contentToText(injected.content);
+        return toolError(
+          `stored to ${path}, but live injection failed: ${text}\nIt will load on next session start.`,
+        );
+      }
+      await bridge.refresh();
+      const piName = bridge.piNameFor(deftoolName);
+      if (!piName) {
+        return toolError(
+          `stored to ${path}, but it was not exposed as a pi tool. Check excludeTools and the deftool visibility settings before retrying.`,
+        );
       }
 
       // 6. Record in the session log.
@@ -178,7 +187,7 @@ export function registerForgeTool(
         `status: ${existed ? "updated (overwrote existing definition; live env re-injected)" : "created"}\n` +
           `Stored: ${path} (${tier} tier)\n` +
           `Registered as pi tool: ${piName} — callable directly from your NEXT turn.\n` +
-          `To exercise it THIS turn, call sema_eval with (${deftoolName} …args) — the definition is already live.`,
+          `To exercise it THIS turn, call sema_eval with (tool/invoke ${deftoolName} {:param value}) — the definition is already live.`,
       );
     },
   });

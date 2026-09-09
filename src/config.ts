@@ -5,8 +5,8 @@
  *
  * HOW/WHY: layering is defaults ← global config.json ← project config.json ←
  * CLI flags, deep-merged in that order so the most specific source wins.
- * Loading never throws — a malformed config file warns and is skipped rather
- * than taking the whole extension down at session start.
+ * Configuration files are validated before merging: malformed values warn and
+ * are skipped rather than taking the whole extension down at session start.
  */
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -18,8 +18,6 @@ export interface PiSemaConfig {
   sandbox: {
     /** Sandbox for the long-lived `sema mcp` server. "all" | "strict" | comma caps ("no-fs-write,no-shell"). */
     mcp: string;
-    /** Sandbox for `sema workflow run`. Same grammar. */
-    workflows: string;
   };
   /** MCP tools to hide. Globs allowed (resolved against tools/list; --exclude wants concrete names). */
   excludeTools: string[];
@@ -33,8 +31,6 @@ export interface PiSemaConfig {
     probeTimeoutMs: number;
   };
   workflows: {
-    /** Default budget cap injected into runs; null = no cap. */
-    defaultBudgetUsd: number | null;
     /** Override for the run journal dir; null = <cwd>/.sema/runs. */
     runDir: string | null;
   };
@@ -44,11 +40,11 @@ export interface PiSemaConfig {
 }
 
 export const DEFAULT_CONFIG: PiSemaConfig = {
-  sandbox: { mcp: "all", workflows: "all" },
+  sandbox: { mcp: "all" },
   excludeTools: ["notebook/*"],
   library: { defaultTier: "project" },
   forge: { maxRounds: 3, probeTimeoutMs: 15_000 },
-  workflows: { defaultBudgetUsd: null, runDir: null },
+  workflows: { runDir: null },
   ui: { dashboardShortcut: "ctrl+alt+s" },
 };
 
@@ -107,7 +103,7 @@ function readConfigFile(
     return null; // missing file is fine
   }
   try {
-    return JSON.parse(raw) as DeepPartial<PiSemaConfig>;
+    return normalizeConfig(JSON.parse(raw), path, warn);
   } catch (err) {
     warn?.(
       `pi-sema: ignoring malformed config at ${path}: ${err instanceof Error ? err.message : String(err)}`,
@@ -118,21 +114,16 @@ function readConfigFile(
 
 export const FLAG_SANDBOX = "sema-sandbox";
 export const FLAG_EXCLUDE = "sema-exclude";
-export const FLAG_BUDGET = "sema-budget";
 
 export function registerConfigFlags(pi: ExtensionAPI): void {
   pi.registerFlag(FLAG_SANDBOX, {
     description:
-      "Sema sandbox for mcp + workflow runs: all | strict | comma caps (e.g. no-fs-write,no-shell)",
+      "Sema MCP sandbox: all | strict | comma caps (e.g. no-fs-write,no-shell)",
     type: "string",
   });
   pi.registerFlag(FLAG_EXCLUDE, {
     description:
       "Comma-separated sema MCP tools to exclude (globs ok, e.g. notebook/*)",
-    type: "string",
-  });
-  pi.registerFlag(FLAG_BUDGET, {
-    description: "Default workflow budget cap in USD",
     type: "string",
   });
 }
@@ -153,7 +144,7 @@ export function loadConfig(
   if (pi) {
     const sandbox = pi.getFlag(FLAG_SANDBOX);
     if (typeof sandbox === "string" && sandbox) {
-      flagOverlay.sandbox = { mcp: sandbox, workflows: sandbox };
+      flagOverlay.sandbox = { mcp: sandbox };
     }
     const exclude = pi.getFlag(FLAG_EXCLUDE);
     if (typeof exclude === "string" && exclude) {
@@ -162,11 +153,137 @@ export function loadConfig(
         .map((s) => s.trim())
         .filter(Boolean);
     }
-    const budget = pi.getFlag(FLAG_BUDGET);
-    if (typeof budget === "string" && budget && !Number.isNaN(Number(budget))) {
-      flagOverlay.workflows = { defaultBudgetUsd: Number(budget) };
-    }
   }
 
   return mergeConfig(DEFAULT_CONFIG, globalFile, projectFile, flagOverlay);
+}
+
+function normalizeConfig(
+  value: unknown,
+  path: string,
+  warn?: (msg: string) => void,
+): DeepPartial<PiSemaConfig> | null {
+  if (!isRecord(value)) {
+    warn?.(`pi-sema: ignoring malformed config at ${path}: expected an object`);
+    return null;
+  }
+
+  const result: DeepPartial<PiSemaConfig> = {};
+  const invalid = (key: string, expected: string) =>
+    warn?.(
+      `pi-sema: ignoring malformed config value ${key} at ${path}: expected ${expected}`,
+    );
+
+  if ("sandbox" in value) {
+    if (!isRecord(value.sandbox)) invalid("sandbox", "an object");
+    else {
+      const sandbox: DeepPartial<PiSemaConfig["sandbox"]> = {};
+      if ("mcp" in value.sandbox) {
+        if (isNonEmptyString(value.sandbox.mcp))
+          sandbox.mcp = value.sandbox.mcp.trim();
+        else invalid("sandbox.mcp", "a non-empty string");
+      }
+      if ("workflows" in value.sandbox) {
+        warn?.(
+          `pi-sema: ignoring unsupported config value sandbox.workflows at ${path}: sema workflow run cannot enforce a CLI sandbox`,
+        );
+      }
+      if (Object.keys(sandbox).length > 0) result.sandbox = sandbox;
+    }
+  }
+
+  if ("excludeTools" in value) {
+    if (
+      Array.isArray(value.excludeTools) &&
+      value.excludeTools.every(isNonEmptyString)
+    ) {
+      result.excludeTools = value.excludeTools.map((pattern) => pattern.trim());
+    } else {
+      invalid("excludeTools", "an array of non-empty strings");
+    }
+  }
+
+  if ("library" in value) {
+    if (!isRecord(value.library)) invalid("library", "an object");
+    else if ("defaultTier" in value.library) {
+      if (
+        value.library.defaultTier === "project" ||
+        value.library.defaultTier === "global"
+      ) {
+        result.library = { defaultTier: value.library.defaultTier };
+      } else {
+        invalid("library.defaultTier", '"project" or "global"');
+      }
+    }
+  }
+
+  if ("forge" in value) {
+    if (!isRecord(value.forge)) invalid("forge", "an object");
+    else {
+      const forge: DeepPartial<PiSemaConfig["forge"]> = {};
+      if ("maxRounds" in value.forge) {
+        if (isPositiveInteger(value.forge.maxRounds)) {
+          forge.maxRounds = value.forge.maxRounds;
+        } else {
+          invalid("forge.maxRounds", "a positive integer");
+        }
+      }
+      if ("probeTimeoutMs" in value.forge) {
+        if (isPositiveInteger(value.forge.probeTimeoutMs)) {
+          forge.probeTimeoutMs = value.forge.probeTimeoutMs;
+        } else {
+          invalid("forge.probeTimeoutMs", "a positive integer");
+        }
+      }
+      if (Object.keys(forge).length > 0) result.forge = forge;
+    }
+  }
+
+  if ("workflows" in value) {
+    if (!isRecord(value.workflows)) invalid("workflows", "an object");
+    else {
+      const workflows: DeepPartial<PiSemaConfig["workflows"]> = {};
+      if ("runDir" in value.workflows) {
+        if (
+          value.workflows.runDir === null ||
+          isNonEmptyString(value.workflows.runDir)
+        ) {
+          workflows.runDir = value.workflows.runDir;
+        } else {
+          invalid("workflows.runDir", "a string or null");
+        }
+      }
+      if ("defaultBudgetUsd" in value.workflows) {
+        warn?.(
+          `pi-sema: ignoring unsupported config value workflows.defaultBudgetUsd at ${path}: sema workflow run has no run-level budget flag`,
+        );
+      }
+      if (Object.keys(workflows).length > 0) result.workflows = workflows;
+    }
+  }
+
+  if ("ui" in value) {
+    if (!isRecord(value.ui)) invalid("ui", "an object");
+    else if ("dashboardShortcut" in value.ui) {
+      if (isNonEmptyString(value.ui.dashboardShortcut)) {
+        result.ui = { dashboardShortcut: value.ui.dashboardShortcut };
+      } else {
+        invalid("ui.dashboardShortcut", "a non-empty string");
+      }
+    }
+  }
+
+  return result;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }

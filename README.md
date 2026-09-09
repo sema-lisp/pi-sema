@@ -106,26 +106,30 @@ Stored tools load into the bridge at session start (filepath mode); forging inse
 ## Configuration
 
 `~/.pi/agent/pi-sema/config.json`, overridden by `<project>/.pi/pi-sema/config.json`,
-overridden by CLI flags (`pi --sema-sandbox=… --sema-exclude=… --sema-budget=…`):
+overridden by CLI flags (`pi --sema-sandbox=… --sema-exclude=…`):
 
 ```jsonc
 {
-  "sandbox": { "mcp": "all", "workflows": "all" }, // "all" = allow everything (default)
+  "sandbox": { "mcp": "all" }, // "all" = allow everything (default)
   "excludeTools": ["notebook/*"], // hidden from Pi (globs ok)
   "library": { "defaultTier": "project" },
   "forge": { "maxRounds": 3, "probeTimeoutMs": 15000 },
-  "workflows": { "defaultBudgetUsd": null, "runDir": null },
+  "workflows": { "runDir": null },
   "ui": { "dashboardShortcut": "ctrl+alt+s" },
 }
 ```
 
 ### Sandboxing
 
-Forge **verification** always runs under `--sandbox strict --no-llm`. **Execution** is
+Forge **verification** always runs under `--sandbox strict --no-llm`. MCP tool execution is
 unsandboxed by default (`"all"`) — that is what makes forged tools useful — with the
 approval dialog as the human gate. Setting `sandbox.mcp` to `"strict"` or a capability
 list (`"no-shell,no-fs-write"`) requires a sema build whose `sema mcp` accepts
 `--sandbox` (sema > 1.30); pi-sema feature-detects and warns when it can't comply.
+
+`sema workflow run` does not support a run-level sandbox or default budget flag. Set workflow
+budgets in each workflow's `:budget` metadata. pi-sema warns and ignores the former
+`sandbox.workflows` and `workflows.defaultBudgetUsd` settings.
 
 ## Development
 
