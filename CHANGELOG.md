@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 0.2.2 — 2026-10-22
+
+### Fixed
+
+- Publish from GitHub Actions using npm trusted publishing with OIDC and npm 11.
+  The 0.2.1 release failed to publish because the workflow had no npm token.
+
 ## 0.2.1 — 2026-10-22
 
 ### Added

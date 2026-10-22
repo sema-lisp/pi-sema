@@ -1,6 +1,6 @@
 {
   "name": "@sema-lang/pi-sema",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Self-extending Sema toolkit for the Pi coding agent — MCP bridge, tool forging (the agent builds its own tools), and journaled workflows with live TUI status.",
   "license": "MIT",
   "author": {
