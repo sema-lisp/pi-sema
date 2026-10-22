@@ -1,9 +1,8 @@
 # Changelog
 
-> [!IMPORTANT]  
-> no version is released yet, we reconsile all of this into an inital v0.1.0 release once we are happy with it.
-
 ## Unreleased
+
+## 0.2.1 — 2026-10-22
 
 ### Added
 
@@ -37,6 +36,7 @@
 
 ### Fixed
 
+- Pi-provided runtime packages are now peer dependencies, preventing duplicate module instances and Pi startup warnings.
 - Pi now receives failed extension tool results with `isError: true`.
 - MCP crash recovery stops after one automatic restart, newly discovered tools do not
   reactivate tools disabled by the user, and an already-aborted call does not start a
